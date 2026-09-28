@@ -18,6 +18,8 @@ def create_app():
 
     # 블루프린트(라우트 모듈) 등록
     from app.routes.main import main_bp
+    from app.routes.inquiry import inquiry_bp
     app.register_blueprint(main_bp)
+    app.register_blueprint(inquiry_bp)
 
     return app

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ inquiry.title }} - 고객 문의게시판{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 860px;">
+    <!-- 상단 링크 네비 -->
+    <div class="mb-3">
+        <a href="{{ url_for('inquiry.list_inquiries') }}" class="text-decoration-none text-muted small fw-medium">
+            <i class="bi bi-chevron-left"></i> 문의 목록으로 돌아가기
+        </a>
+    </div>
+
+    <!-- 문의 상세 본문 카드 -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mb-4">
+        <!-- 헤더 영역 -->
+        <div class="card-header bg-white border-bottom p-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-3 py-1">
+                        {{ inquiry.category }}
+                    </span>
+                    {% if inquiry.is_secret %}
+                        <span class="badge bg-light text-muted border rounded-pill px-2 py-1">
+                            <i class="bi bi-lock-fill me-1"></i>비밀글
+                        </span>
+                    {% endif %}
+                </div>
+                <div>
+                    {% if inquiry.status == '답변완료' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold">답변완료</span>
+                    {% else %}
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-1 fw-bold">답변대기</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <h3 class="fw-bold text-dark mt-2 mb-3">{{ inquiry.title }}</h3>
+
+            <div class="d-flex flex-wrap align-items-center text-muted small gap-3 pt-2 border-top">
+                <div><i class="bi bi-person-circle me-1"></i><strong>작성자:</strong> {{ inquiry.author_name }}</div>
+                <div><i class="bi bi-calendar3 me-1"></i><strong>작성일시:</strong> {{ inquiry.created_at }}</div>
+            </div>
+        </div>
+
+        <!-- 본문 내용 -->
+        <div class="card-body p-4 p-md-5">
+            <div class="text-dark inquiry-content mb-4" style="line-height: 1.8; white-space: pre-line; font-size: 1.05rem;">
+                {{ inquiry.content }}
+            </div>
+        </div>
+
+        <!-- 하단 관리 버튼 (삭제 모달 트리거) -->
+        <div class="card-footer bg-light border-top px-4 py-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('inquiry.list_inquiries') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-list"></i> 목록
+            </a>
+            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                <i class="bi bi-trash3 me-1"></i> 삭제하기
+            </button>
+        </div>
+    </div>
+
+    <!-- 운영자 답변 영역 (답변이 있는 경우) -->
+    {% if inquiry.answer %}
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mb-4 border-start border-4 border-dark">
+        <div class="card-body p-4 p-md-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-dark text-white rounded-pill px-3 py-2">
+                        <i class="bi bi-stars text-warning me-1"></i> VIBE FASHION 답변
+                    </span>
+                    <strong class="text-dark">고객센터 담당자</strong>
+                </div>
+                <small class="text-muted">{{ inquiry.answered_at }}</small>
+            </div>
+            <div class="text-dark bg-light rounded-3 p-4" style="line-height: 1.8; white-space: pre-line;">
+                {{ inquiry.answer }}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- 답변 준비중 안내 -->
+    <div class="p-4 bg-white rounded-4 shadow-sm text-center text-muted border">
+        <i class="bi bi-hourglass-split fs-2 text-warning mb-2 d-block"></i>
+        <h6 class="fw-bold text-dark">고객센터에서 문의를 확인하고 있습니다.</h6>
+        <p class="small text-muted mb-0">담당자 확인 후 순차적으로 성실히 답변을 등록해드리겠습니다.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 게시글 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <form method="POST" action="{{ url_for('inquiry.remove_inquiry', inquiry_id=inquiry.id) }}">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="deleteModalLabel">문의글 삭제</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="text-muted small mb-3">
+                        문의글을 삭제하시려면 작성 시 설정하신 <strong>비밀번호</strong>를 입력해주세요.<br>
+                        삭제된 글은 복구할 수 없습니다.
+                    </p>
+                    <div class="mb-3">
+                        <label for="delete_password" class="form-label small fw-semibold text-secondary">비밀번호</label>
+                        <input type="password" class="form-control rounded-3" id="delete_password" name="password" placeholder="비밀번호 입력" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 fw-semibold">삭제 확인</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

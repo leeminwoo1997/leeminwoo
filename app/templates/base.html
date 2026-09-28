@@ -33,16 +33,21 @@
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
                     <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="{{ url_for('main.index') }}">홈</a>
+                        <a class="nav-link" aria-current="page" href="{{ url_for('main.index') }}">홈</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#products">신상품</a>
+                        <a class="nav-link" href="{{ url_for('main.index') }}#products">신상품</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#products">베스트</a>
+                        <a class="nav-link" href="{{ url_for('main.index') }}#products">베스트</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#products">기획전</a>
+                        <a class="nav-link" href="{{ url_for('main.index') }}#products">기획전</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link fw-semibold" href="{{ url_for('inquiry.list_inquiries') }}">
+                            <i class="bi bi-chat-dots me-1"></i>문의게시판
+                        </a>
                     </li>
                 </ul>
 

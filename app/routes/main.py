@@ -13,14 +13,14 @@ main_bp = Blueprint("main", __name__)
 # Supabase 클라이언트 초기화 함수
 def get_supabase_client() -> Client | None:
     """
-    .env의 SUPABASE_URL 및 SUPABASE_ANON_KEY를 읽어 Supabase 클라이언트를 생성합니다.
-    설정이 누락되었거나 오류 발생 시 None을 반환합니다.
+    SUPABASE_URL 및 키(SUPABASE_SERVICE_KEY 또는 SUPABASE_ANON_KEY)를 읽어 Supabase 클라이언트를 생성합니다.
+    서버 사이드에서 데이터 쓰기 및 Storage 관리를 원활하게 수행하기 위해 서비스 롤 키를 우선 사용합니다.
     """
     supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
     if not supabase_url or not supabase_key:
-        print("[경고] SUPABASE_URL 또는 SUPABASE_ANON_KEY 환경 변수가 설정되지 않았습니다.", file=sys.stderr)
+        print("[경고] SUPABASE_URL 또는 SUPABASE_ANON_KEY/SERVICE_KEY 환경 변수가 설정되지 않았습니다.", file=sys.stderr)
         return None
 
     try:

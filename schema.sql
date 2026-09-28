@@ -207,6 +207,26 @@ create table if not exists public.reviews (
 
 comment on table public.reviews is '상품 구매 리뷰';
 
+-- ------------------------------------------------------------------------------
+-- 2-12. 문의게시판 (inquiries)
+-- ------------------------------------------------------------------------------
+create table if not exists public.inquiries (
+    id uuid primary key default gen_random_uuid(),
+    category varchar(50) default '일반문의' not null,
+    title varchar(200) not null,
+    content text not null,
+    author_name varchar(50) not null,
+    password_hash varchar(255),
+    is_secret boolean default false not null,
+    status varchar(30) default '답변대기' not null,
+    answer text,
+    answered_at timestamptz,
+    created_at timestamptz default timezone('utc'::text, now()) not null,
+    updated_at timestamptz default timezone('utc'::text, now()) not null
+);
+
+comment on table public.inquiries is '고객 1:1 및 상품/배송 문의게시판';
+
 -- ==============================================================================
 -- 3. 성능 최적화를 위한 인덱스 설정
 -- ==============================================================================
@@ -219,6 +239,7 @@ create index if not exists idx_order_items_order on public.order_items(order_id)
 create index if not exists idx_refunds_order on public.refunds(order_id);
 create index if not exists idx_notifications_user_unread on public.notifications(user_id, is_read);
 create index if not exists idx_reviews_product on public.reviews(product_id);
+create index if not exists idx_inquiries_created_at on public.inquiries(created_at desc);
 
 -- ==============================================================================
 -- 4. 소셜 로그인 및 회원가입 시 프로필 자동 생성 트리거 (handle_new_user)

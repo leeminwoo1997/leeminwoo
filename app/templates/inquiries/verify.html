@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}비밀글 비밀번호 확인 - VIBE FASHION{% endblock %}
+
+{% block content %}
+<div class="container py-5 d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white text-center" style="max-width: 480px; width: 100%;">
+        <div class="mb-3">
+            <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light p-3 border">
+                <i class="bi bi-lock-fill text-dark fs-1"></i>
+            </span>
+        </div>
+
+        <h4 class="fw-bold text-dark mb-1">비밀글 보호 안내</h4>
+        <p class="text-muted small mb-4">
+            이 게시글은 작성자의 요청으로 비밀글로 등록되었습니다.<br>
+            작성 시 설정하신 <strong>비밀번호</strong>를 입력해주세요.
+        </p>
+
+        <!-- 플래시 메시지 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show rounded-3 small text-start py-2" role="alert">
+                        <i class="bi bi-exclamation-circle me-1"></i> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- 게시글 요약 정보 -->
+        <div class="p-3 bg-light rounded-3 text-start small mb-4 border">
+            <div class="mb-1 text-truncate"><strong>제목:</strong> {{ inquiry.title }}</div>
+            <div class="text-muted"><strong>작성자:</strong> {{ inquiry.author_name }} | <strong>작성일:</strong> {{ inquiry.created_at[:10] if inquiry.created_at else '' }}</div>
+        </div>
+
+        <!-- 비밀번호 확인 폼 -->
+        <form method="POST" action="{{ url_for('inquiry.verify_inquiry', inquiry_id=inquiry.id) }}">
+            <div class="mb-3 text-start">
+                <label for="password" class="form-label fw-semibold small text-secondary">비밀번호</label>
+                <input type="password" class="form-control form-control-lg rounded-3" id="password" name="password" placeholder="비밀번호 입력" autofocus required>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-dark btn-lg rounded-pill fw-semibold shadow-sm">
+                    <i class="bi bi-unlock-fill me-1"></i> 확인 및 열람
+                </button>
+                <a href="{{ url_for('inquiry.list_inquiries') }}" class="btn btn-link text-decoration-none text-muted small mt-2">
+                    <i class="bi bi-arrow-left"></i> 목록으로 돌아가기
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
