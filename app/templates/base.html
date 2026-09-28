@@ -59,10 +59,10 @@
                     <a href="#" class="text-light text-decoration-none" title="마이페이지">
                         <i class="bi bi-person fs-5"></i>
                     </a>
-                    <a href="#" class="btn btn-outline-light position-relative btn-sm px-3 py-1 rounded-pill">
+                    <a href="{{ url_for('cart.view_cart') }}" class="btn btn-outline-light position-relative btn-sm px-3 py-1 rounded-pill" title="장바구니 확인">
                         <i class="bi bi-bag-heart me-1"></i> 장바구니
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                            2
+                        <span id="nav-cart-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: {% if cart_summary.total_quantity > 0 %}inline-block{% else %}none{% endif %};">
+                            {{ cart_summary.total_quantity }}
                         </span>
                     </a>
                 </div>

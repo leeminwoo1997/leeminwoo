@@ -89,7 +89,8 @@
                     
                     <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
                         <span class="product-price fw-bold text-dark fs-5">{{ product.price }}</span>
-                        <button class="btn btn-sm btn-outline-dark rounded-pill px-3" onclick="alert('{{ product.name }}이(가) 장바구니에 담겼습니다!')">
+                        <button class="btn btn-sm btn-outline-dark rounded-pill px-3" 
+                                onclick="addToCart('{{ product.id }}', '{{ product.name|replace('\'', '\\\'') }}', {{ product.price_num }}, '{{ product.thumbnail_url }}')">
                             <i class="bi bi-cart-plus me-1"></i> 담기
                         </button>
                     </div>
@@ -104,4 +105,78 @@
         {% endfor %}
     </div>
 </section>
+
+<!-- 장바구니 담기 성공 모달 (Bootstrap 5) -->
+<div class="modal fade" id="cartSuccessModal" tabindex="-1" aria-labelledby="cartSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold" id="cartSuccessModalLabel">
+                    <i class="bi bi-check-circle-fill text-success me-2"></i>장바구니 담기 완료
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-3 text-center">
+                <p id="modal-product-message" class="text-dark fw-semibold mb-2">상품이 장바구니에 담겼습니다.</p>
+                <p class="text-muted small mb-0">장바구니로 바로 이동하시겠습니까?</p>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 d-flex justify-content-center gap-2 pb-4">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">
+                    쇼핑 계속하기
+                </button>
+                <a href="{{ url_for('cart.view_cart') }}" class="btn btn-dark rounded-pill px-4 fw-semibold shadow-sm">
+                    장바구니 확인
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function addToCart(productId, name, priceNum, thumbnailUrl) {
+    try {
+        const response = await fetch("{{ url_for('cart.api_add') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                product_id: productId,
+                name: name,
+                price_num: priceNum,
+                thumbnail_url: thumbnailUrl,
+                quantity: 1
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            // 상단 네비게이션 뱃지 수량 즉시 업데이트
+            const badge = document.getElementById("nav-cart-badge");
+            if (badge) {
+                badge.textContent = data.cart.total_quantity;
+                badge.style.display = data.cart.total_quantity > 0 ? "inline-block" : "none";
+            }
+
+            // 모달 안내 메시지 설정 후 띄우기
+            const msgEl = document.getElementById("modal-product-message");
+            if (msgEl) {
+                msgEl.textContent = data.message;
+            }
+            const modalEl = document.getElementById("cartSuccessModal");
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
+        } else {
+            alert(data.message || "장바구니 담기에 실패했습니다.");
+        }
+    } catch (err) {
+        console.error("Cart error:", err);
+        alert("장바구니 통신 중 오류가 발생했습니다.");
+    }
+}
+</script>
 {% endblock %}

@@ -19,7 +19,15 @@ def create_app():
     # 블루프린트(라우트 모듈) 등록
     from app.routes.main import main_bp
     from app.routes.inquiry import inquiry_bp
+    from app.routes.cart import cart_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(inquiry_bp)
+    app.register_blueprint(cart_bp)
+
+    # 모든 템플릿에서 장바구니 요약 정보에 접근할 수 있도록 컨텍스트 프로세서 등록
+    from app.services.cart_service import get_cart_summary
+    @app.context_processor
+    def inject_cart():
+        return {"cart_summary": get_cart_summary()}
 
     return app

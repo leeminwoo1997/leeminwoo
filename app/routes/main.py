@@ -81,14 +81,15 @@ def index():
                     thumbnail_url = "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=600&q=80"
 
                 # 가격 포맷팅 ('19,900원' 형태)
-                raw_price = item.get("price") or 0
-                formatted_price = f"{int(raw_price):,}원"
+                raw_price = int(item.get("price") or 0)
+                formatted_price = f"{raw_price:,}원"
 
                 formatted_products.append({
                     "id": item.get("id"),
                     "name": item.get("name"),
                     "description": item.get("description", ""),
                     "price": formatted_price,
+                    "price_num": raw_price,
                     "thumbnail_url": thumbnail_url
                 })
         else:
