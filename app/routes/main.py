@@ -33,7 +33,7 @@ def get_supabase_client() -> Client | None:
 def index():
     """
     메인 페이지 라우트
-    - Supabase products 테이블에서 is_active=true AND is_featured=true인 상품 최대 4개 조회
+    - Supabase products 테이블에서 is_active=true AND is_featured=true인 상품 최대 6개 조회
     - 대표 썸네일 이미지 및 포맷팅된 가격('19,900원') 가공 후 index.html에 전달
     - 연결 또는 조회 실패 시 에러 로그를 출력하고 빈 리스트로 안전하게 대체
     """
@@ -49,7 +49,7 @@ def index():
                     .select("id, name, description, price, discount_rate, is_active, is_featured, product_images(image_url, is_primary)")
                     .eq("is_active", True)
                     .eq("is_featured", True)
-                    .limit(4)
+                    .limit(6)
                     .execute()
                 )
             except Exception as query_err:
@@ -60,7 +60,7 @@ def index():
                         supabase.table("products")
                         .select("id, name, description, price, discount_rate, is_active, product_images(image_url, is_primary)")
                         .eq("is_active", True)
-                        .limit(4)
+                        .limit(6)
                         .execute()
                     )
                 else:

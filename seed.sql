@@ -19,7 +19,7 @@ set
     is_active = excluded.is_active;
 
 -- ==============================================================================
--- 2. 샘플 상품 4개 등록
+-- 2. 샘플 상품 6개 등록
 -- (베이직 크롭 티셔츠의 경우 정가 29,900원에 할인율 약 33.44% 적용되어 판매가 19,900원 구성)
 -- ==============================================================================
 insert into public.products (category_id, name, slug, description, price, discount_rate, is_active, is_featured)
@@ -60,6 +60,26 @@ values
         'floral-midi-dress',
         '화사한 플라워 패턴과 살랑이는 실루엣이 매력적인 페미닌 미디 원피스입니다.',
         45900,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'top'),
+        '오버핏 티셔츠',
+        'overfit-tshirt',
+        '여유로운 루즈핏 실루엣으로 편안하고 스타일리시하게 착용 가능한 코튼 오버핏 티셔츠입니다.',
+        32000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'bottom'),
+        '베이지 코튼 팬츠',
+        'beige-pants',
+        '내추럴한 베이지 톤과 여유로운 스트레이트 핏이 돋보이는 데일리 코튼 팬츠입니다.',
+        42000,
         0.00,
         true,
         true
@@ -126,6 +146,26 @@ select
 from public.products
 where slug = 'floral-midi-dress';
 
+-- 3-5. 오버핏 티셔츠 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://picsum.photos/seed/vibe-top-overfit/600/800',
+    true,
+    1
+from public.products
+where slug = 'overfit-tshirt';
+
+-- 3-6. 베이지 코튼 팬츠 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://picsum.photos/seed/vibe-bottom-beige/600/800',
+    true,
+    1
+from public.products
+where slug = 'beige-pants';
+
 -- ==============================================================================
 -- 4. 첫 번째 상품(베이직 크롭 티셔츠) 옵션 9개 등록
 -- (블랙 / 화이트 / 베이지 × S / M / L)
@@ -169,4 +209,12 @@ on conflict (sku) do nothing;
 
 insert into public.product_options (product_id, color, size, additional_price, stock_quantity, sku)
 select id, '아이보리', 'FREE', 0, 25, 'FMD-FREE' from public.products where slug = 'floral-midi-dress'
+on conflict (sku) do nothing;
+
+insert into public.product_options (product_id, color, size, additional_price, stock_quantity, sku)
+select id, '화이트', 'FREE', 0, 50, 'OTS-WHT-FREE' from public.products where slug = 'overfit-tshirt'
+on conflict (sku) do nothing;
+
+insert into public.product_options (product_id, color, size, additional_price, stock_quantity, sku)
+select id, '베이지', 'M', 0, 40, 'BEG-PNT-M' from public.products where slug = 'beige-pants'
 on conflict (sku) do nothing;
