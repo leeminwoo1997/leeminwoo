@@ -95,13 +95,13 @@ set
     is_featured = excluded.is_featured;
 
 -- ==============================================================================
--- 3. 상품 이미지 등록 (picsum.photos 무료 이미지)
+-- 3. 상품 이미지 등록 (Unsplash 고화질 의류 이미지)
 -- ==============================================================================
 -- 3-1. 베이직 크롭 티셔츠 이미지
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-top-1/600/800',
+    'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products
@@ -110,7 +110,7 @@ where slug = 'basic-crop-tshirt';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-top-detail/600/800',
+    'https://images.unsplash.com/photo-1534126511673-b6899657816a?auto=format&fit=crop&w=800&q=80',
     false,
     2
 from public.products
@@ -120,7 +120,7 @@ where slug = 'basic-crop-tshirt';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-bottom-1/600/800',
+    'https://images.unsplash.com/photo-1582418702059-97ebafb35d09?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products
@@ -130,7 +130,7 @@ where slug = 'wide-denim-pants';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-outer-1/600/800',
+    'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products
@@ -140,7 +140,7 @@ where slug = 'overfit-cotton-jacket';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-dress-1/600/800',
+    'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products
@@ -150,7 +150,7 @@ where slug = 'floral-midi-dress';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-top-overfit/600/800',
+    'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products
@@ -160,7 +160,7 @@ where slug = 'overfit-tshirt';
 insert into public.product_images (product_id, image_url, is_primary, display_order)
 select
     id,
-    'https://picsum.photos/seed/vibe-bottom-beige/600/800',
+    'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=800&q=80',
     true,
     1
 from public.products

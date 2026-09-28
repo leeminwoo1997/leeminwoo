@@ -75,7 +75,8 @@ def index():
                     thumbnail_url = primary_imgs[0] if primary_imgs else images[0]["image_url"]
 
                 if not thumbnail_url:
-                    thumbnail_url = f"https://picsum.photos/seed/product-{item.get('id')}/600/750"
+                    # 이미지가 등록되지 않은 경우 기본 의류 플레이스홀더 이미지 적용
+                    thumbnail_url = "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=600&q=80"
 
                 # 가격 포맷팅 ('19,900원' 형태)
                 raw_price = item.get("price") or 0
