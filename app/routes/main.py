@@ -49,7 +49,8 @@ def index():
                     .select("id, name, description, price, discount_rate, is_active, is_featured, product_images(image_url, is_primary)")
                     .eq("is_active", True)
                     .eq("is_featured", True)
-                    .limit(6)
+                    .order("created_at", desc=False)
+                    .limit(24)
                     .execute()
                 )
             except Exception as query_err:
@@ -60,7 +61,8 @@ def index():
                         supabase.table("products")
                         .select("id, name, description, price, discount_rate, is_active, product_images(image_url, is_primary)")
                         .eq("is_active", True)
-                        .limit(6)
+                        .order("created_at", desc=False)
+                        .limit(24)
                         .execute()
                     )
                 else:

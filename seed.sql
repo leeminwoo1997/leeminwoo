@@ -83,6 +83,66 @@ values
         0.00,
         true,
         true
+    ),
+    (
+        (select id from public.categories where slug = 'outer'),
+        '블랙 바람막이',
+        'black-windbreaker',
+        '가볍고 방풍 기능이 뛰어난 트렌디한 스트릿 감성의 블랙 바람막이 자켓입니다.',
+        69000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'outer'),
+        '화이트 블레이저',
+        'white-blazer',
+        '단정하고 세련된 테일러드 핏으로 모던한 무드를 완성하는 프리미엄 화이트 블레이저입니다.',
+        89000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'top'),
+        '옐로우가디건',
+        'yellow-cardigan',
+        '화사한 파스텔 옐로우 컬러와 부드러운 니트 텍스처가 돋보이는 루즈핏 브이넥 가디건입니다.',
+        45000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'acc'),
+        '휴대용파우치',
+        'portable-pouch',
+        '넉넉한 수납공간과 미니멀한 질감으로 화장품 및 소지품을 간편하게 휴대할 수 있는 멀티 파우치입니다.',
+        15000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'bag'),
+        '휴대용에코백',
+        'portable-eco-bag',
+        '튼튼한 코튼 캔버스 소재로 가볍고 접어서 휴대하기 좋은 내추럴 무드의 데일리 에코백입니다.',
+        19000,
+        0.00,
+        true,
+        true
+    ),
+    (
+        (select id from public.categories where slug = 'acc'),
+        '퍼플스타킹',
+        'purple-stockings',
+        '감각적인 컬러감과 쫀쫀한 텐션감으로 다리 라인을 슬림하고 트렌디하게 연출해주는 퍼플 타이즈입니다.',
+        12000,
+        0.00,
+        true,
+        true
     )
 on conflict (slug) do update
 set
@@ -165,6 +225,66 @@ select
     1
 from public.products
 where slug = 'beige-pants';
+
+-- 3-7. 블랙 바람막이 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'black-windbreaker';
+
+-- 3-8. 화이트 블레이저 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'white-blazer';
+
+-- 3-9. 옐로우가디건 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'yellow-cardigan';
+
+-- 3-10. 휴대용파우치 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'portable-pouch';
+
+-- 3-11. 휴대용에코백 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'portable-eco-bag';
+
+-- 3-12. 퍼플스타킹 이미지
+insert into public.product_images (product_id, image_url, is_primary, display_order)
+select
+    id,
+    'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=800&q=80',
+    true,
+    1
+from public.products
+where slug = 'purple-stockings';
 
 -- ==============================================================================
 -- 4. 첫 번째 상품(베이직 크롭 티셔츠) 옵션 9개 등록
