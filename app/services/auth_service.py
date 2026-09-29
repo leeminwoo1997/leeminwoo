@@ -5,9 +5,14 @@
 - 한국어 주석 및 Supabase 클라이언트 표준 API 사용
 """
 
+import os
 import sys
+import uuid
+import secrets
+import urllib.parse
 from functools import wraps
 from typing import Any, Dict, Optional
+import httpx
 from flask import session, redirect, url_for, request
 from supabase import Client
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
@@ -187,3 +192,116 @@ def update_user_password(new_password: str, access_token: Optional[str] = None,
             return {"user": res.user}
 
     raise ValueError("비밀번호 변경을 수행할 수 있는 유효한 인증 정보가 없습니다.")
+
+
+# ==============================================================================
+# 네이버(Naver) OAuth 2.0 소셜 로그인 헬퍼 함수
+# ==============================================================================
+
+def get_naver_auth_url(redirect_uri: str, state: str) -> Optional[str]:
+    """
+    네이버 로그인 인가 URL 생성
+    - NAVER_CLIENT_ID가 설정되어 있어야 함
+    """
+    client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+    if not client_id:
+        return None
+
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "state": state
+    }
+    return f"https://nid.naver.com/oauth2.0/authorize?{urllib.parse.urlencode(params)}"
+
+
+def exchange_naver_code_for_token(code: str, state: str) -> Optional[str]:
+    """
+    네이버 인가 코드를 access_token으로 교환
+    """
+    client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+    client_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
+    if not client_id or not client_secret:
+        return None
+
+    url = "https://nid.naver.com/oauth2.0/token"
+    params = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "state": state
+    }
+    try:
+        resp = httpx.get(url, params=params, timeout=10.0)
+        data = resp.json()
+        return data.get("access_token")
+    except Exception as e:
+        print(f"[에러] 네이버 토큰 발급 실패: {e}", file=sys.stderr)
+        return None
+
+
+def get_naver_user_profile(access_token: str) -> Optional[Dict[str, Any]]:
+    """
+    네이버 access_token을 사용하여 사용자 프로필 정보 조회
+    """
+    url = "https://openapi.naver.com/v1/nid/me"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        resp = httpx.get(url, headers=headers, timeout=10.0)
+        data = resp.json()
+        if data.get("resultcode") == "00":
+            return data.get("response")
+        print(f"[경고] 네이버 회원 정보 조회 실패 응답: {data}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[에러] 네이버 회원 정보 조회 요청 예외: {e}", file=sys.stderr)
+        return None
+
+
+def get_or_create_social_user(email: str, name: str, avatar_url: Optional[str] = None, provider: str = "naver") -> str:
+    """
+    소셜 계정(네이버 등) 사용자 정보를 바탕으로 Supabase 사용자를 조회하거나 생성
+    - 이미 존재하는 경우 user_id 반환
+    - 없는 경우 관리자 권한으로 신규 사용자 및 프로필 생성
+    """
+    admin = get_admin_supabase_client()
+    if admin:
+        # 1. 기존 가입 사용자 확인
+        try:
+            users = admin.auth.admin.list_users()
+            for u in users:
+                if u.email and u.email.lower() == email.lower():
+                    return u.id
+        except Exception as e:
+            print(f"[경고] Supabase list_users 조회 실패: {e}", file=sys.stderr)
+
+        # 2. 신규 사용자 생성
+        try:
+            res = admin.auth.admin.create_user({
+                "email": email,
+                "email_confirm": True,
+                "password": secrets.token_urlsafe(24),
+                "user_metadata": {
+                    "full_name": name,
+                    "name": name,
+                    "avatar_url": avatar_url,
+                    "provider": provider
+                }
+            })
+            if res and res.user:
+                return res.user.id
+        except Exception as e:
+            print(f"[경고] Supabase create_user 실패: {e}", file=sys.stderr)
+            # 동시성 등으로 이미 생성되었을 경우 다시 조회
+            try:
+                users = admin.auth.admin.list_users()
+                for u in users:
+                    if u.email and u.email.lower() == email.lower():
+                        return u.id
+            except Exception:
+                pass
+
+    # Admin 클라이언트 미설정 시 안전한 고유 식별자(UUIDv5) 폴백
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{provider}:{email}"))

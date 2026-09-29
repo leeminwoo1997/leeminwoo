@@ -7,6 +7,7 @@
 
 import os
 import sys
+import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, session
 from supabase_auth.errors import AuthApiError
 from app.services.auth_service import (
@@ -18,6 +19,10 @@ from app.services.auth_service import (
     get_oauth_sign_in_url,
     send_password_reset_email,
     update_user_password,
+    get_naver_auth_url,
+    exchange_naver_code_for_token,
+    get_naver_user_profile,
+    get_or_create_social_user,
 )
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -33,6 +38,7 @@ ERROR_MESSAGES = {
     "user_already_exists": "이미 가입된 이메일 주소입니다. 로그인해주세요.",
     "confirm_failed": "유효하지 않거나 만료된 인증 링크입니다.",
     "oauth_failed": "소셜 로그인 연동 중 오류가 발생했습니다. 다시 시도해주세요.",
+    "naver_config_missing": "네이버 로그인 설정(NAVER_CLIENT_ID)이 필요합니다.",
     "reset_request_failed": "비밀번호 재설정 메일 발송 중 오류가 발생했습니다.",
     "reset_failed": "비밀번호 재설정에 실패했습니다. 다시 시도해주세요.",
     "session_expired": "인증 정보가 만료되었습니다. 다시 시도해주세요.",
@@ -43,6 +49,7 @@ SUCCESS_MESSAGES = {
     "login_success": "로그인되었습니다. VIBE FASHION에 오신 것을 환영합니다!",
     "kakao_login_success": "카카오 계정으로 성공적으로 로그인되었습니다!",
     "google_login_success": "구글 계정으로 성공적으로 로그인되었습니다!",
+    "naver_login_success": "네이버 계정으로 성공적으로 로그인되었습니다!",
     "social_login_success": "성공적으로 로그인되었습니다!",
     "signup_success": "회원가입이 완료되었습니다. 인증 이메일을 확인해주세요.",
     "reset_email_sent": "비밀번호 재설정 안내 메일이 발송되었습니다. 수신함을 확인해주세요.",
@@ -224,6 +231,73 @@ def google_login():
         return redirect(oauth_url)
     except Exception as e:
         print(f"[에러] 구글 OAuth URL 생성 실패: {e}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+
+@auth_bp.route("/naver")
+def naver_login():
+    """
+    [네이버 로그인 요청 라우트]
+    네이버 OAuth 2.0 인증 URL을 생성하고 네이버 인가 페이지로 리다이렉트합니다.
+    """
+    redirect_url = f"{get_site_url()}/auth/naver/callback"
+    state = secrets.token_urlsafe(16)
+    auth_url = get_naver_auth_url(redirect_uri=redirect_url, state=state)
+
+    if not auth_url:
+        print("[경고] NAVER_CLIENT_ID 환경 변수가 설정되지 않았습니다.", file=sys.stderr)
+        return redirect(url_for("auth.login", error="naver_config_missing"))
+
+    session["naver_oauth_state"] = state
+    return redirect(auth_url)
+
+
+@auth_bp.route("/naver/callback")
+def naver_callback():
+    """
+    [네이버 OAuth 콜백 처리 라우트]
+    네이버 로그인 완료 후 인가 코드를 받아 토큰 교환 및 사용자 프로필을 동기화합니다.
+    """
+    code = request.args.get("code")
+    state = request.args.get("state")
+    error = request.args.get("error")
+    error_description = request.args.get("error_description")
+
+    saved_state = session.pop("naver_oauth_state", None)
+
+    if error or not code or not state or state != saved_state:
+        print(f"[경고] 네이버 OAuth 콜백 에러 또는 CSRF 불일치: error={error}, desc={error_description}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+    try:
+        access_token = exchange_naver_code_for_token(code=code, state=state)
+        if not access_token:
+            return redirect(url_for("auth.login", error="oauth_failed"))
+
+        profile = get_naver_user_profile(access_token)
+        if not profile:
+            return redirect(url_for("auth.login", error="oauth_failed"))
+
+        naver_id = profile.get("id", "")
+        email = profile.get("email") or f"naver_{naver_id[:12]}@naver.com"
+        name = profile.get("name") or profile.get("nickname") or email.split("@")[0]
+        avatar_url = profile.get("profile_image")
+
+        user_id = get_or_create_social_user(
+            email=email,
+            name=name,
+            avatar_url=avatar_url,
+            provider="naver"
+        )
+
+        session["user_id"] = user_id
+        session["user_email"] = email
+        session["user_name"] = name
+
+        return redirect(url_for("main.index", success="naver_login_success"))
+
+    except Exception as e:
+        print(f"[에러] 네이버 로그인 처리 중 예외 발생: {e}", file=sys.stderr)
         return redirect(url_for("auth.login", error="oauth_failed"))
 
 
