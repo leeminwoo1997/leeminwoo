@@ -32,7 +32,7 @@ ERROR_MESSAGES = {
     "signup_failed": "회원가입 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
     "user_already_exists": "이미 가입된 이메일 주소입니다. 로그인해주세요.",
     "confirm_failed": "유효하지 않거나 만료된 인증 링크입니다.",
-    "oauth_failed": "카카오 로그인 연동 중 오류가 발생했습니다. 다시 시도해주세요.",
+    "oauth_failed": "소셜 로그인 연동 중 오류가 발생했습니다. 다시 시도해주세요.",
     "reset_request_failed": "비밀번호 재설정 메일 발송 중 오류가 발생했습니다.",
     "reset_failed": "비밀번호 재설정에 실패했습니다. 다시 시도해주세요.",
     "session_expired": "인증 정보가 만료되었습니다. 다시 시도해주세요.",
@@ -42,6 +42,8 @@ ERROR_MESSAGES = {
 SUCCESS_MESSAGES = {
     "login_success": "로그인되었습니다. VIBE FASHION에 오신 것을 환영합니다!",
     "kakao_login_success": "카카오 계정으로 성공적으로 로그인되었습니다!",
+    "google_login_success": "구글 계정으로 성공적으로 로그인되었습니다!",
+    "social_login_success": "성공적으로 로그인되었습니다!",
     "signup_success": "회원가입이 완료되었습니다. 인증 이메일을 확인해주세요.",
     "reset_email_sent": "비밀번호 재설정 안내 메일이 발송되었습니다. 수신함을 확인해주세요.",
     "password_reset_success": "비밀번호가 성공적으로 변경되었습니다. 새로운 비밀번호로 로그인해주세요.",
@@ -190,9 +192,10 @@ def kakao_login():
         oauth_url = oauth_data.get("url")
         code_verifier = oauth_data.get("code_verifier")
 
-        # 콜백 요청 시 PKCE 검증에 사용할 code_verifier를 Flask session에 저장
+        # 콜백 요청 시 PKCE 검증에 사용할 code_verifier 및 provider를 Flask session에 저장
         if code_verifier:
             session["oauth_code_verifier"] = code_verifier
+        session["oauth_provider"] = "kakao"
 
         return redirect(oauth_url)
     except Exception as e:
@@ -200,11 +203,35 @@ def kakao_login():
         return redirect(url_for("auth.login", error="oauth_failed"))
 
 
+@auth_bp.route("/google")
+def google_login():
+    """
+    [구글 로그인 요청 라우트]
+    Supabase Google OAuth 인증 URL을 생성하고 구글 인가 페이지로 리다이렉트합니다.
+    PKCE 검증을 위한 code_verifier를 Flask 세션에 안전하게 보관합니다.
+    """
+    redirect_url = f"{get_site_url()}/auth/callback"
+    try:
+        oauth_data = get_oauth_sign_in_url(provider="google", redirect_to=redirect_url)
+        oauth_url = oauth_data.get("url")
+        code_verifier = oauth_data.get("code_verifier")
+
+        # 콜백 요청 시 PKCE 검증에 사용할 code_verifier 및 provider를 Flask session에 저장
+        if code_verifier:
+            session["oauth_code_verifier"] = code_verifier
+        session["oauth_provider"] = "google"
+
+        return redirect(oauth_url)
+    except Exception as e:
+        print(f"[에러] 구글 OAuth URL 생성 실패: {e}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+
 @auth_bp.route("/callback")
 def oauth_callback():
     """
-    [카카오/OAuth 콜백 처리 라우트]
-    카카오 인증 완료 후 code 파라미터로 세션을 획득하고 로그인 처리합니다.
+    [카카오/구글 OAuth 콜백 처리 라우트]
+    OAuth 인증 완료 후 code 파라미터로 세션을 획득하고 로그인 처리합니다.
     """
     auth_code = request.args.get("code")
     error = request.args.get("error")
@@ -213,8 +240,9 @@ def oauth_callback():
         print(f"[경고] OAuth 콜백 에러 또는 인증 코드 누락: {error}", file=sys.stderr)
         return redirect(url_for("auth.login", error="oauth_failed"))
 
-    # 세션에서 저장해둔 PKCE code_verifier 꺼내기
+    # 세션에서 저장해둔 PKCE code_verifier 및 provider 꺼내기
     code_verifier = session.pop("oauth_code_verifier", None)
+    provider = session.pop("oauth_provider", "")
 
     try:
         auth_res = exchange_code(auth_code, code_verifier=code_verifier)
@@ -228,7 +256,15 @@ def oauth_callback():
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
 
-            return redirect(url_for("main.index", success="kakao_login_success"))
+            # 프로바이더별 맞춤 성공 메시지 전달
+            if provider == "google":
+                success_key = "google_login_success"
+            elif provider == "kakao":
+                success_key = "kakao_login_success"
+            else:
+                success_key = "social_login_success"
+
+            return redirect(url_for("main.index", success=success_key))
 
         return redirect(url_for("auth.login", error="oauth_failed"))
     except Exception as e:
