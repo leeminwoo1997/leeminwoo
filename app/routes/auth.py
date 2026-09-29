@@ -40,6 +40,8 @@ ERROR_MESSAGES = {
 }
 
 SUCCESS_MESSAGES = {
+    "login_success": "로그인되었습니다. VIBE FASHION에 오신 것을 환영합니다!",
+    "kakao_login_success": "카카오 계정으로 성공적으로 로그인되었습니다!",
     "signup_success": "회원가입이 완료되었습니다. 인증 이메일을 확인해주세요.",
     "reset_email_sent": "비밀번호 재설정 안내 메일이 발송되었습니다. 수신함을 확인해주세요.",
     "password_reset_success": "비밀번호가 성공적으로 변경되었습니다. 새로운 비밀번호로 로그인해주세요.",
@@ -99,6 +101,9 @@ def login():
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
 
+            # 별도 next 경로가 없으면 메인으로 이동하며 로그인 성공 메시지 전달
+            if not request.form.get("next"):
+                return redirect(url_for("main.index", success="login_success"))
             return redirect(next_url)
 
         except AuthApiError as e:
@@ -223,7 +228,7 @@ def oauth_callback():
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
 
-            return redirect(url_for("main.index"))
+            return redirect(url_for("main.index", success="kakao_login_success"))
 
         return redirect(url_for("auth.login", error="oauth_failed"))
     except Exception as e:

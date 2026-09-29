@@ -1,6 +1,7 @@
 import sys
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 from app.services.supabase_client import get_supabase_client
+from app.routes.auth import get_flash_messages
 
 # 'main' 블루프린트 생성
 main_bp = Blueprint("main", __name__)
@@ -76,5 +77,11 @@ def index():
         print(f"[에러] Supabase 상품 데이터 조회 중 오류 발생: {e}", file=sys.stderr)
         formatted_products = []
 
-    return render_template("index.html", products=formatted_products)
+    error_msg, success_msg = get_flash_messages()
+    return render_template(
+        "index.html",
+        products=formatted_products,
+        error=error_msg,
+        success=success_msg
+    )
 
