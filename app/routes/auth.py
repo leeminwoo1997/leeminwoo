@@ -177,10 +177,18 @@ def kakao_login():
     """
     [카카오 로그인 요청 라우트]
     Supabase Kakao OAuth 인증 URL을 생성하고 카카오 인가 페이지로 리다이렉트합니다.
+    PKCE 검증을 위한 code_verifier를 Flask 세션에 안전하게 보관합니다.
     """
     redirect_url = f"{get_site_url()}/auth/callback"
     try:
-        oauth_url = get_oauth_sign_in_url(provider="kakao", redirect_to=redirect_url)
+        oauth_data = get_oauth_sign_in_url(provider="kakao", redirect_to=redirect_url)
+        oauth_url = oauth_data.get("url")
+        code_verifier = oauth_data.get("code_verifier")
+
+        # 콜백 요청 시 PKCE 검증에 사용할 code_verifier를 Flask session에 저장
+        if code_verifier:
+            session["oauth_code_verifier"] = code_verifier
+
         return redirect(oauth_url)
     except Exception as e:
         print(f"[에러] 카카오 OAuth URL 생성 실패: {e}", file=sys.stderr)
@@ -200,8 +208,11 @@ def oauth_callback():
         print(f"[경고] OAuth 콜백 에러 또는 인증 코드 누락: {error}", file=sys.stderr)
         return redirect(url_for("auth.login", error="oauth_failed"))
 
+    # 세션에서 저장해둔 PKCE code_verifier 꺼내기
+    code_verifier = session.pop("oauth_code_verifier", None)
+
     try:
-        auth_res = exchange_code(auth_code)
+        auth_res = exchange_code(auth_code, code_verifier=code_verifier)
         user = auth_res.get("user")
         auth_session = auth_res.get("session")
 

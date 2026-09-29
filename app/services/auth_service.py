@@ -101,21 +101,25 @@ def verify_email_otp(token_hash: Optional[str] = None, token: Optional[str] = No
     }
 
 
-def exchange_code(code: str) -> Dict[str, Any]:
+def exchange_code(code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
     """
     [Supabase Auth] PKCE auth_code 교환 처리
+    - Flask session 등에 저장된 code_verifier가 있으면 함께 전달하여 멀티 워커/인스턴스 환경에서도 안전하게 세션 교환
     """
     supabase = get_auth_supabase_client()
-    response = supabase.auth.exchange_code_for_session({"auth_code": code})
+    params: Dict[str, Any] = {"auth_code": code}
+    if code_verifier:
+        params["code_verifier"] = code_verifier
+    response = supabase.auth.exchange_code_for_session(params)
     return {
         "user": response.user,
         "session": response.session
     }
 
 
-def get_oauth_sign_in_url(provider: str, redirect_to: str) -> str:
+def get_oauth_sign_in_url(provider: str, redirect_to: str) -> Dict[str, str]:
     """
-    [Supabase Auth] 소셜 로그인(Kakao 등) 인증 URL 생성
+    [Supabase Auth] 소셜 로그인(Kakao 등) 인증 URL 생성 및 code_verifier 반환
     """
     supabase = get_auth_supabase_client()
     res = supabase.auth.sign_in_with_oauth({
@@ -124,7 +128,12 @@ def get_oauth_sign_in_url(provider: str, redirect_to: str) -> str:
             "redirect_to": redirect_to
         }
     })
-    return res.url
+    # supabase-py가 생성하여 메모리 스토리지에 저장한 code_verifier 추출
+    verifier = supabase.auth._storage.get_item(f"{supabase.auth._storage_key}-code-verifier")
+    return {
+        "url": res.url,
+        "code_verifier": verifier or ""
+    }
 
 
 def send_password_reset_email(email: str, redirect_to: str) -> None:
