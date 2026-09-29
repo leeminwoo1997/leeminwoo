@@ -1,0 +1,371 @@
+"""
+인증 라우트 모듈 (auth.py)
+- 이메일 회원가입, 로그인, 이메일 인증, 비밀번호 찾기 및 재설정
+- Supabase Python 클라이언트 사용
+- 에러/성공 메시지는 URL 파라미터로 전달하여 한국어로 알림 표시
+"""
+
+import os
+import sys
+from flask import Blueprint, render_template, request, redirect, url_for, session
+from supabase_auth.errors import AuthApiError
+from app.services.auth_service import (
+    login_required,
+    sign_up_user,
+    sign_in_user,
+    verify_email_otp,
+    exchange_code,
+    get_oauth_sign_in_url,
+    send_password_reset_email,
+    update_user_password,
+)
+
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+# 한국어 메시지 매핑 사전
+ERROR_MESSAGES = {
+    "email_not_confirmed": "이메일 인증이 완료되지 않았습니다. 수신된 이메일의 인증 링크를 먼저 확인해주세요.",
+    "invalid_credentials": "이메일 또는 비밀번호가 올바르지 않습니다.",
+    "missing_fields": "모든 필수 항목을 입력해주세요.",
+    "password_mismatch": "비밀번호 확인이 일치하지 않습니다.",
+    "weak_password": "비밀번호는 최소 6자 이상이어야 합니다.",
+    "signup_failed": "회원가입 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+    "user_already_exists": "이미 가입된 이메일 주소입니다. 로그인해주세요.",
+    "confirm_failed": "유효하지 않거나 만료된 인증 링크입니다.",
+    "oauth_failed": "카카오 로그인 연동 중 오류가 발생했습니다. 다시 시도해주세요.",
+    "reset_request_failed": "비밀번호 재설정 메일 발송 중 오류가 발생했습니다.",
+    "reset_failed": "비밀번호 재설정에 실패했습니다. 다시 시도해주세요.",
+    "session_expired": "인증 정보가 만료되었습니다. 다시 시도해주세요.",
+    "login_required": "해당 기능을 이용하려면 로그인이 필요합니다.",
+}
+
+SUCCESS_MESSAGES = {
+    "signup_success": "회원가입이 완료되었습니다. 인증 이메일을 확인해주세요.",
+    "reset_email_sent": "비밀번호 재설정 안내 메일이 발송되었습니다. 수신함을 확인해주세요.",
+    "password_reset_success": "비밀번호가 성공적으로 변경되었습니다. 새로운 비밀번호로 로그인해주세요.",
+    "logout_success": "로그아웃되었습니다.",
+    "email_confirmed": "이메일 인증이 완료되었습니다.",
+}
+
+
+def get_site_url() -> str:
+    """사이트 기본 URL 반환 (환경 변수 우선, 없으면 현재 요청의 host_url 사용)"""
+    env_site_url = os.getenv("SITE_URL")
+    if env_site_url:
+        return env_site_url.rstrip("/")
+    if request:
+        return request.host_url.rstrip("/")
+    return "http://localhost:5000"
+
+
+def get_flash_messages():
+    """URL 파라미터에서 error 및 success 키를 추출하여 한국어 메시지로 변환"""
+    error_key = request.args.get("error")
+    success_key = request.args.get("success")
+
+    error_msg = ERROR_MESSAGES.get(error_key, error_key if error_key else None)
+    success_msg = SUCCESS_MESSAGES.get(success_key, success_key if success_key else None)
+
+    return error_msg, success_msg
+
+
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    """
+    [1] GET/POST /auth/login - 로그인 폼 및 처리
+    - 이메일 미인증 시 error=email_not_confirmed 로 리다이렉트
+    - 로그인 성공 시 세션에 user_id, email, access_token 저장 후 메인(/) 또는 next 로 이동
+    """
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        next_url = request.form.get("next") or url_for("main.index")
+
+        if not email or not password:
+            return redirect(url_for("auth.login", error="missing_fields", next=next_url))
+
+        try:
+            res = sign_in_user(email=email, password=password)
+            user = res.get("user")
+            auth_session = res.get("session")
+
+            if not user:
+                return redirect(url_for("auth.login", error="invalid_credentials", next=next_url))
+
+            # Flask 세션에 사용자 정보 저장
+            session["user_id"] = user.id
+            session["user_email"] = user.email
+            if auth_session:
+                session["access_token"] = auth_session.access_token
+                session["refresh_token"] = auth_session.refresh_token
+
+            return redirect(next_url)
+
+        except AuthApiError as e:
+            # 이메일 미인증 상태 검출
+            code = getattr(e, "code", "") or ""
+            msg = str(e).lower()
+            if code == "email_not_confirmed" or "email not confirmed" in msg:
+                return redirect(url_for("auth.login", error="email_not_confirmed", next=next_url))
+            return redirect(url_for("auth.login", error="invalid_credentials", next=next_url))
+        except Exception as e:
+            print(f"[에러] 로그인 예외 발생: {e}", file=sys.stderr)
+            return redirect(url_for("auth.login", error="invalid_credentials", next=next_url))
+
+    error_msg, success_msg = get_flash_messages()
+    next_url = request.args.get("next", "")
+    return render_template(
+        "auth/login.html",
+        error=error_msg,
+        success=success_msg,
+        next=next_url
+    )
+
+
+@auth_bp.route("/signup", methods=["GET", "POST"])
+def signup():
+    """
+    [2] GET/POST /auth/signup - 회원가입 폼 및 처리
+    - 가입 성공 시 /auth/signup-complete 페이지 이동
+    """
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        password_confirm = request.form.get("password_confirm", "").strip()
+
+        if not email or not password or not password_confirm:
+            return redirect(url_for("auth.signup", error="missing_fields"))
+
+        if password != password_confirm:
+            return redirect(url_for("auth.signup", error="password_mismatch"))
+
+        if len(password) < 6:
+            return redirect(url_for("auth.signup", error="weak_password"))
+
+        confirm_redirect_url = f"{get_site_url()}/auth/confirm"
+
+        try:
+            sign_up_user(email=email, password=password, redirect_to=confirm_redirect_url)
+            # 가입 성공 시 안내 페이지로 이동
+            return redirect(url_for("auth.signup_complete", email=email))
+        except AuthApiError as e:
+            print(f"[에러] 회원가입 실패: {e}", file=sys.stderr)
+            msg = (str(e.message) if hasattr(e, "message") else str(e)).lower()
+            code = getattr(e, "code", "") or ""
+            if "already registered" in msg or "already exists" in msg or code == "user_already_exists":
+                return redirect(url_for("auth.signup", error="user_already_exists"))
+            return redirect(url_for("auth.signup", error="signup_failed"))
+        except Exception as e:
+            print(f"[에러] 회원가입 예외 발생: {e}", file=sys.stderr)
+            return redirect(url_for("auth.signup", error="signup_failed"))
+
+    error_msg, success_msg = get_flash_messages()
+    return render_template("auth/signup.html", error=error_msg, success=success_msg)
+
+
+@auth_bp.route("/signup-complete")
+def signup_complete():
+    """
+    [3] GET /auth/signup-complete - "인증 메일을 보냈습니다" 안내 페이지
+    """
+    email = request.args.get("email", "")
+    return render_template("auth/signup_complete.html", email=email)
+
+
+@auth_bp.route("/kakao")
+def kakao_login():
+    """
+    [카카오 로그인 요청 라우트]
+    Supabase Kakao OAuth 인증 URL을 생성하고 카카오 인가 페이지로 리다이렉트합니다.
+    """
+    redirect_url = f"{get_site_url()}/auth/callback"
+    try:
+        oauth_url = get_oauth_sign_in_url(provider="kakao", redirect_to=redirect_url)
+        return redirect(oauth_url)
+    except Exception as e:
+        print(f"[에러] 카카오 OAuth URL 생성 실패: {e}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+
+@auth_bp.route("/callback")
+def oauth_callback():
+    """
+    [카카오/OAuth 콜백 처리 라우트]
+    카카오 인증 완료 후 code 파라미터로 세션을 획득하고 로그인 처리합니다.
+    """
+    auth_code = request.args.get("code")
+    error = request.args.get("error")
+
+    if error or not auth_code:
+        print(f"[경고] OAuth 콜백 에러 또는 인증 코드 누락: {error}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+    try:
+        auth_res = exchange_code(auth_code)
+        user = auth_res.get("user")
+        auth_session = auth_res.get("session")
+
+        if user:
+            session["user_id"] = user.id
+            session["user_email"] = user.email or (user.user_metadata.get("email") if hasattr(user, "user_metadata") and user.user_metadata else "")
+            if auth_session:
+                session["access_token"] = auth_session.access_token
+                session["refresh_token"] = auth_session.refresh_token
+
+            return redirect(url_for("main.index"))
+
+        return redirect(url_for("auth.login", error="oauth_failed"))
+    except Exception as e:
+        print(f"[에러] OAuth 콜백 처리 중 오류: {e}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="oauth_failed"))
+
+
+@auth_bp.route("/confirm")
+def confirm():
+    """
+    [4] GET /auth/confirm - 이메일 인증 링크 클릭 처리
+    - verify_otp 호출 → 성공 시 Flask session 저장 → /mypage
+    - token_hash, token, code 등 파라미터 유연하게 처리
+    """
+    token_hash = request.args.get("token_hash")
+    token = request.args.get("token")
+    email = request.args.get("email")
+    otp_type = request.args.get("type", "signup")
+    auth_code = request.args.get("code")
+
+    try:
+        auth_res = None
+
+        # 1. code(PKCE) 파라미터가 전달된 경우
+        if auth_code:
+            try:
+                auth_res = exchange_code(auth_code)
+            except Exception as e:
+                print(f"[경고] code 교환 실패: {e}", file=sys.stderr)
+
+        # 2. token_hash 또는 token 방식인 경우 verify_otp 호출
+        if not auth_res and (token_hash or token):
+            auth_res = verify_email_otp(
+                token_hash=token_hash,
+                token=token,
+                email=email,
+                otp_type=otp_type
+            )
+
+        if auth_res and auth_res.get("user"):
+            user = auth_res["user"]
+            auth_session = auth_res.get("session")
+
+            # Flask session 저장
+            session["user_id"] = user.id
+            session["user_email"] = user.email
+            if auth_session:
+                session["access_token"] = auth_session.access_token
+                session["refresh_token"] = auth_session.refresh_token
+
+            # 비밀번호 재설정 목적의 확인 링크인 경우
+            if otp_type == "recovery":
+                return redirect(url_for("auth.reset_password"))
+
+            # 일반 회원가입 인증인 경우 /mypage 이동
+            return redirect(url_for("auth.mypage", success="email_confirmed"))
+
+        # 파라미터가 없거나 인증 응답 실패 시
+        return redirect(url_for("auth.login", error="confirm_failed"))
+
+    except Exception as e:
+        print(f"[에러] 이메일 인증 실패: {e}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="confirm_failed"))
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """
+    [5] GET/POST /auth/forgot-password - 비밀번호 재설정 메일 발송
+    """
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        if not email:
+            return redirect(url_for("auth.forgot_password", error="missing_fields"))
+
+        redirect_url = f"{get_site_url()}/auth/confirm?type=recovery"
+
+        try:
+            send_password_reset_email(email=email, redirect_to=redirect_url)
+            return redirect(url_for("auth.forgot_password", success="reset_email_sent"))
+        except Exception as e:
+            print(f"[에러] 비밀번호 재설정 이메일 전송 실패: {e}", file=sys.stderr)
+            return redirect(url_for("auth.forgot_password", error="reset_request_failed"))
+
+    error_msg, success_msg = get_flash_messages()
+    return render_template("auth/forgot_password.html", error=error_msg, success=success_msg)
+
+
+@auth_bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    """
+    [6] GET/POST /auth/reset-password - 새 비밀번호 설정
+    """
+    if request.method == "POST":
+        new_password = request.form.get("password", "").strip()
+        confirm_password = request.form.get("password_confirm", "").strip()
+
+        if not new_password or not confirm_password:
+            return redirect(url_for("auth.reset_password", error="missing_fields"))
+
+        if new_password != confirm_password:
+            return redirect(url_for("auth.reset_password", error="password_mismatch"))
+
+        if len(new_password) < 6:
+            return redirect(url_for("auth.reset_password", error="weak_password"))
+
+        access_token = session.get("access_token")
+        refresh_token = session.get("refresh_token")
+        user_id = session.get("user_id")
+
+        if not access_token and not user_id:
+            return redirect(url_for("auth.login", error="session_expired"))
+
+        try:
+            update_user_password(
+                new_password=new_password,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                user_id=user_id
+            )
+            # 비밀번호 변경 후 로그아웃 처리 또는 재로그인 유도
+            session.clear()
+            return redirect(url_for("auth.login", success="password_reset_success"))
+        except Exception as e:
+            print(f"[에러] 비밀번호 변경 실패: {e}", file=sys.stderr)
+            return redirect(url_for("auth.reset_password", error="reset_failed"))
+
+    error_msg, success_msg = get_flash_messages()
+    return render_template("auth/reset_password.html", error=error_msg, success=success_msg)
+
+
+@auth_bp.route("/logout")
+def logout():
+    """
+    로그아웃 라우트
+    - 세션 초기화 후 로그인 페이지 이동
+    """
+    session.clear()
+    return redirect(url_for("auth.login", success="logout_success"))
+
+
+@auth_bp.route("/mypage")
+@login_required
+def mypage():
+    """
+    마이페이지 라우트 (GET /auth/mypage 또는 /mypage)
+    - login_required 검증
+    """
+    error_msg, success_msg = get_flash_messages()
+    return render_template(
+        "auth/mypage.html",
+        user_id=session.get("user_id"),
+        user_email=session.get("user_email"),
+        error=error_msg,
+        success=success_msg
+    )

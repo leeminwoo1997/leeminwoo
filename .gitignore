@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -28,6 +29,7 @@ wheels/
 
 # 환경 변수 파일 (민감 정보 보호)
 .env
+.env.*
 
 # 에디터 및 IDE 설정
 .vscode/

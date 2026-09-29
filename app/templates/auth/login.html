@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}로그인 - VIBE FASHION{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-5">
+            <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <h3 class="fw-bold mb-1">로그인</h3>
+                    <p class="text-muted small">VIBE FASHION 계정으로 로그인해주세요.</p>
+                </div>
+
+                <!-- 에러 알림 -->
+                {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                    <div>{{ error }}</div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                <!-- 성공 알림 -->
+                {% if success %}
+                <div class="alert alert-success alert-dismissible fade show d-flex align-items-center" role="alert">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div>{{ success }}</div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('auth.login') }}" class="needs-validation">
+                    <input type="hidden" name="next" value="{{ next }}">
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold">이메일 주소</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-envelope"></i></span>
+                            <input type="email" class="form-control" id="email" name="email" placeholder="example@email.com" required autofocus>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="password" class="form-label fw-semibold mb-0">비밀번호</label>
+                            <a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none small text-muted">
+                                비밀번호를 잊으셨나요?
+                            </a>
+                        </div>
+                        <div class="input-group mt-2">
+                            <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
+                            <input type="password" class="form-control" id="password" name="password" placeholder="비밀번호를 입력하세요" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-dark btn-lg fw-bold rounded-3">로그인</button>
+                    </div>
+                </form>
+
+                <div class="d-flex align-items-center my-4">
+                    <hr class="flex-grow-1 text-muted my-0">
+                    <span class="px-3 small text-muted">또는</span>
+                    <hr class="flex-grow-1 text-muted my-0">
+                </div>
+
+                <!-- 카카오 1초 간편 로그인 버튼 -->
+                <div class="d-grid">
+                    <a href="{{ url_for('auth.kakao_login') }}" class="btn btn-warning btn-lg fw-bold rounded-3 d-flex align-items-center justify-content-center text-dark text-decoration-none shadow-sm" style="background-color: #FEE500; border-color: #FEE500;">
+                        <i class="bi bi-chat-fill me-2 fs-5"></i> 카카오로 1초 만에 시작하기
+                    </a>
+                </div>
+
+                <div class="text-center small mt-4">
+                    <span class="text-muted">아직 계정이 없으신가요?</span>
+                    <a href="{{ url_for('auth.signup') }}" class="fw-semibold text-decoration-none text-dark ms-1">
+                        회원가입하기
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

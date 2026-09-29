@@ -8,9 +8,7 @@
 - POST /inquiries/<id>/delete : 문의글 삭제 처리
 """
 
-import sys
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from app.routes.main import get_supabase_client
 from app.services.inquiry_service import (
     get_inquiry_list,
     get_inquiry_by_id,
@@ -24,8 +22,7 @@ inquiry_bp = Blueprint("inquiry", __name__, url_prefix="/inquiries")
 @inquiry_bp.route("/")
 def list_inquiries():
     """문의 목록 조회"""
-    supabase = get_supabase_client()
-    inquiries = get_inquiry_list(supabase)
+    inquiries = get_inquiry_list()
     
     # 세션에서 이미 비밀번호 확인을 마친 문의글 id 집합
     unlocked_ids = session.get("unlocked_inquiries", [])
@@ -52,9 +49,7 @@ def new_inquiry():
             flash("비밀번호는 최소 4자리 이상 입력해주세요.", "warning")
             return render_template("inquiries/form.html", form=request.form)
 
-        supabase = get_supabase_client()
         created = create_inquiry(
-            supabase=supabase,
             category=category,
             title=title,
             author_name=author_name,
@@ -79,8 +74,7 @@ def new_inquiry():
 @inquiry_bp.route("/<inquiry_id>")
 def detail_inquiry(inquiry_id):
     """문의 상세 보기 (비밀글인 경우 비밀번호 확인 여부 체크)"""
-    supabase = get_supabase_client()
-    inquiry = get_inquiry_by_id(supabase, inquiry_id)
+    inquiry = get_inquiry_by_id(inquiry_id)
 
     if not inquiry:
         flash("존재하지 않거나 삭제된 문의글입니다.", "danger")
@@ -97,8 +91,7 @@ def detail_inquiry(inquiry_id):
 @inquiry_bp.route("/<inquiry_id>/verify", methods=["POST"])
 def verify_inquiry(inquiry_id):
     """비밀글 비밀번호 검증 처리"""
-    supabase = get_supabase_client()
-    inquiry = get_inquiry_by_id(supabase, inquiry_id)
+    inquiry = get_inquiry_by_id(inquiry_id)
 
     if not inquiry:
         flash("문의글을 찾을 수 없습니다.", "danger")
@@ -120,10 +113,9 @@ def verify_inquiry(inquiry_id):
 @inquiry_bp.route("/<inquiry_id>/delete", methods=["POST"])
 def remove_inquiry(inquiry_id):
     """문의글 삭제 (비밀번호 일치 확인 후 처리)"""
-    supabase = get_supabase_client()
     input_password = request.form.get("password", "").strip()
 
-    success, msg = delete_inquiry(supabase, inquiry_id, input_password)
+    success, msg = delete_inquiry(inquiry_id, input_password)
     if success:
         flash(msg, "success")
         # 세션 잠금 목록에서 제거

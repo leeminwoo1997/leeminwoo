@@ -56,9 +56,27 @@
                     <a href="#" class="text-light text-decoration-none" title="검색">
                         <i class="bi bi-search fs-5"></i>
                     </a>
-                    <a href="#" class="text-light text-decoration-none" title="마이페이지">
-                        <i class="bi bi-person fs-5"></i>
+                    {% if session.get('user_id') %}
+                    <div class="dropdown">
+                        <button class="btn btn-link text-light text-decoration-none p-0 dropdown-toggle d-flex align-items-center" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="내 계정">
+                            <i class="bi bi-person-check fs-5 me-1 text-success"></i>
+                            <span class="small d-none d-md-inline">{{ session.get('user_email', '').split('@')[0] }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li><h6 class="dropdown-header">{{ session.get('user_email') }}</h6></li>
+                            <li><a class="dropdown-item" href="{{ url_for('auth.mypage') }}"><i class="bi bi-person me-2"></i>마이페이지</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>로그아웃</a></li>
+                        </ul>
+                    </div>
+                    {% else %}
+                    <a href="{{ url_for('auth.login') }}" class="text-light text-decoration-none small fw-semibold" title="로그인">
+                        <i class="bi bi-box-arrow-in-right fs-5 align-middle me-1"></i>로그인
                     </a>
+                    <a href="{{ url_for('auth.signup') }}" class="btn btn-outline-light btn-sm px-2 py-1 rounded-pill small fw-semibold" title="회원가입">
+                        <i class="bi bi-person-plus me-1"></i>회원가입
+                    </a>
+                    {% endif %}
                     <a href="{{ url_for('cart.view_cart') }}" class="btn btn-outline-light position-relative btn-sm px-3 py-1 rounded-pill" title="장바구니 확인">
                         <i class="bi bi-bag-heart me-1"></i> 장바구니
                         <span id="nav-cart-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: {% if cart_summary.total_quantity > 0 %}inline-block{% else %}none{% endif %};">

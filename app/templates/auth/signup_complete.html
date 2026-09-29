@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}가입 완료 안내 - VIBE FASHION{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6 text-center">
+            <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5">
+                <div class="mb-4">
+                    <span class="d-inline-flex p-3 rounded-circle bg-success-subtle text-success">
+                        <i class="bi bi-envelope-check-fill display-5"></i>
+                    </span>
+                </div>
+
+                <h3 class="fw-bold mb-3">인증 메일을 보냈습니다</h3>
+
+                <p class="text-secondary lead fs-6 mb-4">
+                    {% if email %}
+                    <strong class="text-dark">{{ email }}</strong>(으)로<br>
+                    {% endif %}
+                    계정 인증 링크가 포함된 메일을 발송했습니다.<br>
+                    메일함에서 인증 링크를 클릭하여 가입을 완료해주세요.
+                </p>
+
+                <div class="alert alert-light border small text-muted text-start mb-4">
+                    <i class="bi bi-info-circle me-1"></i> 메일이 도착하지 않았나요?
+                    <ul class="mb-0 mt-1 ps-3">
+                        <li>스팸 메일함 또는 정크 메일함을 확인해주세요.</li>
+                        <li>네트워크 상황에 따라 1~2분 정도 지연될 수 있습니다.</li>
+                    </ul>
+                </div>
+
+                <div class="d-grid gap-2 col-md-8 mx-auto">
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-dark fw-bold py-2 rounded-3">
+                        로그인 페이지로 이동
+                    </a>
+                    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary py-2 rounded-3">
+                        홈으로 돌아가기
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
