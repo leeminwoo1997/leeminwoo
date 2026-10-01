@@ -60,11 +60,17 @@
                                     <td class="text-center">
                                         <div class="input-group input-group-sm justify-content-center mx-auto" style="max-width: 110px;">
                                             <button class="btn btn-outline-secondary" type="button" 
-                                                    onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) - 1)"
+                                                    onclick="changeQuantity('{{ item.id }}', parseInt(document.getElementById('qty-{{ item.id }}').value, 10) - 1)"
                                                     {% if item.is_out_of_stock %}disabled{% endif %}>-</button>
-                                            <input type="text" class="form-control text-center bg-white" value="{{ item.quantity }}" readonly style="max-width: 45px;">
+                                            <input type="number" id="qty-{{ item.id }}" 
+                                                   class="form-control text-center bg-white" 
+                                                   value="{{ item.quantity }}" 
+                                                   min="1" max="{{ item.stock }}"
+                                                   onchange="handleQuantityChange('{{ item.id }}', {{ item.stock }})"
+                                                   onkeydown="handleQuantityKeydown(event, '{{ item.id }}', {{ item.stock }})"
+                                                   {% if item.is_out_of_stock %}disabled{% endif %}>
                                             <button class="btn btn-outline-secondary" type="button" 
-                                                    onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) + 1)"
+                                                    onclick="changeQuantity('{{ item.id }}', parseInt(document.getElementById('qty-{{ item.id }}').value, 10) + 1)"
                                                     {% if item.is_out_of_stock %}disabled{% endif %}>+</button>
                                         </div>
                                     </td>
@@ -149,8 +155,14 @@
 <script>
 // 수량 변경 함수 (PATCH /cart/<cart_id>)
 async function changeQuantity(cartId, quantity) {
-    if (quantity < 1) {
-        if (!confirm('해당 상품을 장바구니에서 삭제하시겠습니까?')) return;
+    // 입력값 정제
+    quantity = parseInt(quantity, 10);
+    if (isNaN(quantity) || quantity < 1) {
+        if (!confirm('해당 상품을 장바구니에서 삭제하시겠습니까?')) {
+            // 취소한 경우 원래 값으로 복원
+            location.reload();
+            return;
+        }
         quantity = 0; // 0으로 설정하여 에러 메시지 표시
     }
     try {
@@ -166,9 +178,70 @@ async function changeQuantity(cartId, quantity) {
         } else {
             // 에러 메시지 표시 (재고 부족 등)
             alert(data.message || '수량 변경 중 오류가 발생했습니다.');
+            location.reload();
         }
     } catch (e) {
         alert('수량 변경 중 오류가 발생했습니다: ' + e.message);
+    }
+}
+
+// 수량 입력 필드 변경 함수 (Enter 키 또는 포커스 아웃 시)
+function handleQuantityChange(cartId, maxStock) {
+    const input = document.getElementById(`qty-${cartId}`);
+    let value = parseInt(input.value, 10);
+    
+    // 유효성 검사
+    if (isNaN(value) || value < 1) {
+        alert('수량은 1 이상이어야 합니다.');
+        input.value = 1;
+        return;
+    }
+    
+    if (value > maxStock) {
+        alert(`최대 ${maxStock}개까지만 주문 가능합니다.`);
+        input.value = maxStock;
+        value = maxStock;
+    }
+    
+    // 수량 변경 API 호출
+    changeQuantity(cartId, value);
+}
+
+// 키보드 이벤트 처리 (화살표 키, Enter 키)
+function handleQuantityKeydown(event, cartId, maxStock) {
+    const input = event.target;
+    let currentValue = parseInt(input.value, 10) || 1;
+    
+    switch(event.key) {
+        case 'ArrowUp':
+            // 위 화살표: 수량 증가
+            event.preventDefault();
+            if (currentValue < maxStock) {
+                input.value = currentValue + 1;
+                handleQuantityChange(cartId, maxStock);
+            } else {
+                alert(`최대 ${maxStock}개까지만 주문 가능합니다.`);
+            }
+            break;
+            
+        case 'ArrowDown':
+            // 아래 화살표: 수량 감소
+            event.preventDefault();
+            if (currentValue > 1) {
+                input.value = currentValue - 1;
+                handleQuantityChange(cartId, maxStock);
+            } else {
+                if (confirm('해당 상품을 장바구니에서 삭제하시겠습니까?')) {
+                    changeQuantity(cartId, 0);
+                }
+            }
+            break;
+            
+        case 'Enter':
+            // Enter 키: 수량 변경 적용
+            event.preventDefault();
+            handleQuantityChange(cartId, maxStock);
+            break;
     }
 }
 
