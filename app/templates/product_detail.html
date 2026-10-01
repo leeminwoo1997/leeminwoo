@@ -337,9 +337,13 @@
         addToCartBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>담는 중...';
 
         try {
-            // 옵션이 포함된 고유 ID 또는 식별 키로 장바구니 추가
+            // 옵션 정보와 함께 장바구니 추가 요청
             const payload = {
-                product_id: `${productId}-${selectedOption.option_id || size}`,
+                product_id: productId,
+                product_option_id: selectedOption.option_id,
+                option_id: selectedOption.option_id,
+                color: color,
+                size: size,
                 name: `${productName} (${color} / ${size})`,
                 price_num: productPrice,
                 thumbnail_url: productThumbnail,
@@ -351,6 +355,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
+            // 로그인되어 있지 않아 /auth/login 으로 리다이렉트된 경우 이동
+            if (response.redirected || response.url.includes('/auth/login')) {
+                alert('로그인이 필요한 서비스입니다. 로그인 페이지로 이동합니다.');
+                window.location.href = response.url || '/auth/login';
+                return;
+            }
 
             const result = await response.json();
 
