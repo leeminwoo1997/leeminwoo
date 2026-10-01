@@ -52,6 +52,26 @@
     </div>
 </section>
 
+<!-- 관리자 백오피스 링크 (관리자만 표시) -->
+{% if session.get('is_admin') %}
+<section class="container my-4">
+    <div class="alert alert-info border-2 border-primary bg-light rounded-3 shadow-sm" role="alert">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-speedometer2 text-primary fs-4 me-3"></i>
+                <div>
+                    <h6 class="alert-heading fw-bold mb-1 text-primary">관리자 전용</h6>
+                    <p class="mb-0 text-dark">상품, 주문, 고객 정보 등을 관리할 수 있습니다.</p>
+                </div>
+            </div>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-primary fw-semibold rounded-pill px-4 py-2 flex-shrink-0">
+                <i class="bi bi-arrow-right me-2"></i>백오피스 입장
+            </a>
+        </div>
+    </div>
+</section>
+{% endif %}
+
 <!-- 2. 기획 배너 & 프로모션 안내 -->
 <section class="container my-5">
     <div class="row g-3">
