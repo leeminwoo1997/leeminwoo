@@ -1,5 +1,5 @@
 import sys
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, jsonify, abort
 from app.services.supabase_client import get_supabase_client
 from app.routes.auth import get_flash_messages
 
@@ -84,4 +84,144 @@ def index():
         error=error_msg,
         success=success_msg
     )
+
+
+@main_bp.route("/products/<product_id>")
+def product_detail(product_id: str):
+    """
+    [상품 상세 페이지 라우트]
+    - Supabase에서 product_id로 상품 상세 정보 및 이미지 조회
+    - 상품 이미지, 이름, 가격(정가/할인가/할인율), 설명 가공
+    - product_options 테이블에서 해당 상품의 유효한 색상(color) 목록을 중복 없이(DISTINCT) 조회
+    - templates/product_detail.html 렌더링
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        abort(500, description="데이터베이스 연결에 실패했습니다.")
+
+    try:
+        # 1. 상품 정보 및 이미지 조회
+        p_res = (
+            supabase.table("products")
+            .select("id, name, slug, description, price, discount_rate, is_active, product_images(image_url, is_primary, display_order)")
+            .eq("id", product_id)
+            .execute()
+        )
+
+        if not p_res.data or len(p_res.data) == 0:
+            abort(404, description="존재하지 않거나 삭제된 상품입니다.")
+
+        product = p_res.data[0]
+
+        # 이미지 목록 정렬 및 썸네일 선정
+        images = product.get("product_images", []) or []
+        images.sort(key=lambda img: (not img.get("is_primary", False), img.get("display_order", 0)))
+        main_image_url = images[0]["image_url"] if images else "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?auto=format&fit=crop&w=800&q=80"
+
+        # 가격 및 할인 계산
+        original_price = int(product.get("price") or 0)
+        discount_rate = float(product.get("discount_rate") or 0.0)
+
+        if discount_rate > 0:
+            discounted_price = int(round(original_price * (1 - discount_rate / 100.0)))
+        else:
+            discounted_price = original_price
+
+        # 2. product_options 테이블에서 해당 상품의 색상 목록 조회 (NULL 제외 및 중복 제거)
+        opt_res = (
+            supabase.table("product_options")
+            .select("color")
+            .eq("product_id", product_id)
+            .not_.is_("color", "null")
+            .execute()
+        )
+
+        # Python set을 이용해 중복 제거 및 정렬
+        seen_colors = []
+        for r in (opt_res.data or []):
+            c = r.get("color")
+            if c and c not in seen_colors:
+                seen_colors.append(c)
+
+        product_detail_data = {
+            "id": product["id"],
+            "name": product["name"],
+            "description": product.get("description") or "상세 설명이 등록되지 않은 상품입니다.",
+            "original_price": original_price,
+            "original_price_str": f"{original_price:,}원",
+            "discount_rate": int(round(discount_rate)),
+            "discounted_price": discounted_price,
+            "discounted_price_str": f"{discounted_price:,}원",
+            "has_discount": discount_rate > 0 and discounted_price < original_price,
+            "main_image_url": main_image_url,
+            "images": [img["image_url"] for img in images] if images else [main_image_url],
+            "colors": seen_colors
+        }
+
+        error_msg, success_msg = get_flash_messages()
+        return render_template(
+            "product_detail.html",
+            product=product_detail_data,
+            error=error_msg,
+            success=success_msg
+        )
+
+    except Exception as e:
+        print(f"[에러] 상품 상세 조회 오류: {e}", file=sys.stderr)
+        abort(404, description="상품 정보를 불러오는 중 오류가 발생했습니다.")
+
+
+@main_bp.route("/products/<product_id>/options")
+def get_product_options_by_color(product_id: str):
+    """
+    [색상별 사이즈 및 재고 비동기 조회 API]
+    - Query Parameter: ?color=<색상>
+    - 선택된 색상에 해당하는 사이즈(size), 옵션ID(id), 실시간 재고(stock) 목록 반환
+    """
+    color = request.args.get("color", "").strip()
+    if not color:
+        return jsonify({"sizes": []})
+
+    supabase = get_supabase_client()
+    if not supabase:
+        return jsonify({"error": "DB 연결 실패"}), 500
+
+    try:
+        # 해당 상품 + 색상에 매칭되는 옵션 조회
+        res = (
+            supabase.table("product_options")
+            .select("id, size, stock, stock_quantity, additional_price")
+            .eq("product_id", product_id)
+            .eq("color", color)
+            .not_.is_("size", "null")
+            .execute()
+        )
+
+        size_list = []
+        # 사이즈 순서 정렬 기준 (S, M, L, XL, FREE 등)
+        size_priority = {"XS": 1, "S": 2, "M": 3, "L": 4, "XL": 5, "XXL": 6, "FREE": 7}
+
+        for row in (res.data or []):
+            stock = row.get("stock")
+            if stock is None:
+                stock = row.get("stock_quantity") or 0
+            stock = max(0, int(stock))
+
+            size_name = row.get("size")
+            size_list.append({
+                "option_id": row.get("id"),
+                "size": size_name,
+                "stock": stock,
+                "is_out_of_stock": stock == 0,
+                "additional_price": int(row.get("additional_price") or 0)
+            })
+
+        # 사이즈 정렬 (S -> M -> L 순서)
+        size_list.sort(key=lambda s: size_priority.get(s["size"].upper(), 99))
+
+        return jsonify({"sizes": size_list})
+
+    except Exception as e:
+        print(f"[에러] 색상별 옵션 조회 실패: {e}", file=sys.stderr)
+        return jsonify({"error": "옵션을 조회할 수 없습니다."}), 500
 
