@@ -1,5 +1,6 @@
 import os
 from flask import Flask, redirect, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from app.services.cart_service import get_cart_summary
 from app.routes.main import main_bp
@@ -19,6 +20,9 @@ def create_app():
 
     # 기본 설정 적용
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "default-dev-secret-key")
+
+    # Azure App Service / 리버스 프록시 뒤에서 HTTPS 헤더(X-Forwarded-Proto, Host) 정상 인식
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # 블루프린트(라우트 모듈) 등록
     app.register_blueprint(main_bp)

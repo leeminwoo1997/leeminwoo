@@ -65,7 +65,12 @@ def get_site_url() -> str:
     if env_site_url:
         return env_site_url.rstrip("/")
     if request:
-        return request.host_url.rstrip("/")
+        url = request.host_url.rstrip("/")
+        # Azure / 리버스 프록시 헤더 확인하여 http를 https로 보정
+        forwarded_proto = request.headers.get("X-Forwarded-Proto")
+        if (forwarded_proto == "https" or "azurewebsites.net" in url) and url.startswith("http://"):
+            url = "https://" + url[len("http://"):]
+        return url
     return "http://localhost:5000"
 
 
