@@ -171,20 +171,23 @@ def product_detail(product_id: str):
         abort(404, description="상품 정보를 불러오는 중 오류가 발생했습니다.")
 
 
+@main_bp.route("/api/products/<product_id>/sizes")
 @main_bp.route("/products/<product_id>/options")
-def get_product_options_by_color(product_id: str):
+def get_product_sizes_by_color(product_id: str):
     """
-    [색상별 사이즈 및 재고 비동기 조회 API]
-    - Query Parameter: ?color=<색상>
-    - 선택된 색상에 해당하는 사이즈(size), 옵션ID(id), 실시간 재고(stock) 목록 반환
+    [상품 색상 선택 시 호출되는 사이즈 및 재고 조회 API]
+    - URL: GET /api/products/<product_id>/sizes?color=<선택한 색상>
+    - product_options 테이블에서 product_id + color로 필터링
+    - size, stock 정보를 담은 JSON 배열 반환
+      예: [{"size": "S", "stock": 3}, {"size": "M", "stock": 0}]
     """
     color = request.args.get("color", "").strip()
     if not color:
-        return jsonify({"sizes": []})
+        return jsonify([])
 
     supabase = get_supabase_client()
     if not supabase:
-        return jsonify({"error": "DB 연결 실패"}), 500
+        return jsonify({"error": "데이터베이스 연결에 실패했습니다."}), 500
 
     try:
         # 해당 상품 + 색상에 매칭되는 옵션 조회
@@ -198,7 +201,7 @@ def get_product_options_by_color(product_id: str):
         )
 
         size_list = []
-        # 사이즈 순서 정렬 기준 (S, M, L, XL, FREE 등)
+        # 사이즈 순서 정렬 기준 (XS, S, M, L, XL, XXL, FREE 등)
         size_priority = {"XS": 1, "S": 2, "M": 3, "L": 4, "XL": 5, "XXL": 6, "FREE": 7}
 
         for row in (res.data or []):
@@ -211,17 +214,15 @@ def get_product_options_by_color(product_id: str):
             size_list.append({
                 "option_id": row.get("id"),
                 "size": size_name,
-                "stock": stock,
-                "is_out_of_stock": stock == 0,
-                "additional_price": int(row.get("additional_price") or 0)
+                "stock": stock
             })
 
         # 사이즈 정렬 (S -> M -> L 순서)
-        size_list.sort(key=lambda s: size_priority.get(s["size"].upper(), 99))
+        size_list.sort(key=lambda s: size_priority.get(str(s["size"]).upper(), 99))
 
-        return jsonify({"sizes": size_list})
+        return jsonify(size_list)
 
     except Exception as e:
-        print(f"[에러] 색상별 옵션 조회 실패: {e}", file=sys.stderr)
+        print(f"[에러] 색상별 사이즈 조회 실패: {e}", file=sys.stderr)
         return jsonify({"error": "옵션을 조회할 수 없습니다."}), 500
 

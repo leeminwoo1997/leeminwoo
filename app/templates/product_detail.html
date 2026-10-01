@@ -198,9 +198,12 @@
         resetQuantitySection();
 
         try {
-            const response = await fetch(`/products/${productId}/options?color=${encodeURIComponent(color)}`);
+            // GET /api/products/<product_id>/sizes?color=<선택한 색상> API 호출
+            const response = await fetch(`/api/products/${productId}/sizes?color=${encodeURIComponent(color)}`);
             const data = await response.json();
-            availableSizes = data.sizes || [];
+            
+            // 응답이 배열 형태 [ { size: "S", stock: 3 }, ... ] 또는 { sizes: [...] } 둘 다 유연하게 처리
+            availableSizes = Array.isArray(data) ? data : (data.sizes || []);
 
             sizeSelect.innerHTML = '<option value="" selected disabled>사이즈를 선택해주세요</option>';
 
@@ -214,8 +217,8 @@
                 const option = document.createElement('option');
                 option.value = item.size;
 
-                if (item.is_out_of_stock || item.stock === 0) {
-                    // 재고가 0인 사이즈: "품절" 표시 및 선택 불가 처리
+                // stock이 0인 항목은 옵션 텍스트에 "(품절)" 표시 + disabled 처리
+                if (item.stock === 0) {
                     option.textContent = `${item.size} (품절)`;
                     option.disabled = true;
                     option.classList.add('text-muted');
