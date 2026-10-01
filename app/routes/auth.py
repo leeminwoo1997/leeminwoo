@@ -13,6 +13,8 @@ from supabase_auth.errors import AuthApiError
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
 from app.services.auth_service import (
     login_required,
+    admin_required,
+    set_user_session,
     sign_up_user,
     sign_in_user,
     verify_email_otp,
@@ -121,6 +123,9 @@ def login():
             if auth_session:
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
+            
+            # 관리자 권한 확인
+            set_user_session(user.id)
 
             # 별도 next 경로가 없으면 메인으로 이동하며 로그인 성공 메시지 전달
             if not request.form.get("next"):
@@ -312,6 +317,9 @@ def naver_callback():
         session["user_id"] = user_id
         session["user_email"] = email
         session["user_name"] = name
+        
+        # 관리자 권한 확인
+        set_user_session(user_id)
 
         return redirect(url_for("main.index", success="naver_login_success"))
 
@@ -350,6 +358,9 @@ def oauth_callback():
             if auth_session:
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
+            
+            # 관리자 권한 확인
+            set_user_session(user.id)
 
             # 프로바이더별 맞춤 성공 메시지 전달
             if provider == "google":
@@ -414,6 +425,9 @@ def confirm():
             if auth_session:
                 session["access_token"] = auth_session.access_token
                 session["refresh_token"] = auth_session.refresh_token
+            
+            # 관리자 권한 확인
+            set_user_session(user.id)
 
             # 비밀번호 재설정 목적의 확인 링크인 경우
             if otp_type == "recovery":

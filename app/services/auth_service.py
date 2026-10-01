@@ -43,6 +43,52 @@ def login_required(f):
     return decorated_function
 
 
+def admin_required(f):
+    """
+    관리자 권한 필수 데코레이터
+    - Flask session에 'user_id'가 존재하고 'is_admin' = True인지 확인
+    - 로그인하지 않았으면 로그인 페이지로 리다이렉트
+    - 로그인했지만 관리자가 아니면 403 Forbidden 오류 표시
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("user_id"):
+            # 미로그인 상태일 때 로그인 페이지로 이동
+            return redirect(url_for("auth.login", error="login_required", next=request.path))
+        
+        # 관리자 권한 확인
+        if not session.get("is_admin"):
+            # 관리자 권한이 없을 때 403 오류
+            from flask import abort
+            abort(403)
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def set_user_session(user_id: str) -> None:
+    """
+    사용자 로그인 후 Flask session에 사용자 정보 설정
+    - user_id로부터 profiles 테이블에서 role 조회
+    - session에 is_admin 플래그 설정
+    """
+    supabase = get_supabase_client()
+    if not supabase or not user_id:
+        session["is_admin"] = False
+        return
+    
+    try:
+        res = supabase.table("profiles").select("role").eq("id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            role = res.data[0].get("role", "customer")
+            session["is_admin"] = (role == "admin")
+        else:
+            session["is_admin"] = False
+    except Exception as e:
+        print(f"[경고] 사용자 역할 조회 실패: {e}", file=sys.stderr)
+        session["is_admin"] = False
+
+
 def sign_up_user(email: str, password: str, redirect_to: Optional[str] = None) -> Dict[str, Any]:
     """
     [Supabase Auth] 이메일 회원가입 요청

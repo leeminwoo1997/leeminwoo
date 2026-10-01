@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block extra_styles %}
+<style>
+    /* 백오피스 사이드바 */
+    .admin-sidebar {
+        min-height: calc(100vh - 56px);
+        background-color: #2c3e50;
+        padding: 20px 0;
+        position: sticky;
+        top: 56px;
+    }
+
+    .admin-sidebar .nav-link {
+        color: #ecf0f1;
+        padding: 12px 20px;
+        border-left: 3px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .admin-sidebar .nav-link:hover {
+        background-color: rgba(52, 152, 219, 0.2);
+        border-left-color: #3498db;
+        color: #fff;
+    }
+
+    .admin-sidebar .nav-link.active {
+        background-color: rgba(52, 152, 219, 0.3);
+        border-left-color: #3498db;
+        color: #fff;
+        font-weight: bold;
+    }
+
+    .admin-main {
+        padding: 30px;
+        background-color: #f8f9fa;
+        min-height: calc(100vh - 56px);
+    }
+
+    .admin-header {
+        margin-bottom: 30px;
+    }
+
+    .admin-header h1 {
+        font-size: 28px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 10px;
+    }
+
+    .admin-card {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        border-left: 4px solid #3498db;
+        padding: 20px;
+        background-color: white;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-card.orders {
+        border-left-color: #3498db;
+    }
+
+    .stat-card.revenue {
+        border-left-color: #27ae60;
+    }
+
+    .stat-card.users {
+        border-left-color: #e74c3c;
+    }
+
+    .stat-card .stat-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 10px 0;
+    }
+
+    .stat-card .stat-label {
+        font-size: 14px;
+        color: #7f8c8d;
+    }
+
+    .admin-btn-group {
+        margin-bottom: 20px;
+    }
+
+    .table-striped tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .status-active {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .status-inactive {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .status-pending {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .status-completed {
+        background-color: #d4edda;
+        color: #155724;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row g-0">
+        <!-- 사이드바 -->
+        <div class="col-md-2">
+            <div class="admin-sidebar">
+                <h5 class="px-3 mb-3 text-light fw-bold">
+                    <i class="bi bi-speedometer2"></i> 백오피스
+                </h5>
+                <nav class="nav flex-column">
+                    <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+                        <i class="bi bi-graph-up"></i> 대시보드
+                    </a>
+                    <a href="{{ url_for('admin.products') }}" class="nav-link {% if 'product' in request.endpoint %}active{% endif %}">
+                        <i class="bi bi-box"></i> 상품 관리
+                    </a>
+                    <a href="{{ url_for('admin.orders') }}" class="nav-link {% if request.endpoint == 'admin.orders' %}active{% endif %}">
+                        <i class="bi bi-bag-check"></i> 주문 관리
+                    </a>
+                    <a href="{{ url_for('admin.users') }}" class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}">
+                        <i class="bi bi-people"></i> 사용자 관리
+                    </a>
+                    <a href="{{ url_for('admin.inquiries') }}" class="nav-link {% if request.endpoint == 'admin.inquiries' %}active{% endif %}">
+                        <i class="bi bi-chat-dots"></i> 문의 관리
+                    </a>
+                    <a href="{{ url_for('admin.reports') }}" class="nav-link {% if request.endpoint == 'admin.reports' %}active{% endif %}">
+                        <i class="bi bi-bar-chart"></i> 매출 리포트
+                    </a>
+                </nav>
+            </div>
+        </div>
+
+        <!-- 메인 콘텐츠 -->
+        <div class="col-md-10">
+            <div class="admin-main">
+                {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-circle"></i> {{ error }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+                
+                {% if success %}
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle"></i> {{ success }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
+                {% block admin_content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

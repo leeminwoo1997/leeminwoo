@@ -1,0 +1,119 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<!-- 사용자 관리 헤더 -->
+<div class="admin-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1><i class="bi bi-people"></i> 사용자 관리</h1>
+            <p class="text-muted">전체 {{ total_count }}명의 회원</p>
+        </div>
+    </div>
+</div>
+
+<!-- 검색 -->
+<div class="admin-card mb-4">
+    <div class="row g-3">
+        <div class="col-md-5">
+            <input type="text" class="form-control" placeholder="이메일, 이름, 연락처 검색">
+        </div>
+        <div class="col-md-3">
+            <select class="form-select">
+                <option selected>등급: 전체</option>
+                <option>BRONZE</option>
+                <option>SILVER</option>
+                <option>GOLD</option>
+                <option>VIP</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-outline-secondary w-100">
+                <i class="bi bi-search"></i> 검색
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 사용자 테이블 -->
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>회원ID</th>
+                    <th>이메일</th>
+                    <th>이름</th>
+                    <th>연락처</th>
+                    <th>등급</th>
+                    <th>역할</th>
+                    <th>누적 구매액</th>
+                    <th>가입일</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if users %}
+                    {% for user in users %}
+                    <tr>
+                        <td>
+                            <code>{{ user.id }}</code>
+                        </td>
+                        <td>{{ user.email }}</td>
+                        <td class="fw-bold">{{ user.full_name }}</td>
+                        <td><small>{{ user.phone }}</small></td>
+                        <td>
+                            <span class="badge bg-info">{{ user.grade }}</span>
+                        </td>
+                        <td>
+                            {% if user.role == '관리자' %}
+                                <span class="badge bg-danger">{{ user.role }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ user.role }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold text-success">{{ user.total_spent }}</td>
+                        <td><small class="text-muted">{{ user.joined }}</small></td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            등록된 회원이 없습니다.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 페이지네이션 -->
+{% if total_pages > 1 %}
+<nav aria-label="페이지 네비게이션" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=1) }}">처음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=page-1) }}">이전</a>
+            </li>
+        {% endif %}
+
+        {% for p in range(max(1, page-2), min(total_pages+1, page+3)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('admin.users', page=p) }}">{{ p }}</a>
+            </li>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=page+1) }}">다음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.users', page=total_pages) }}">마지막</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

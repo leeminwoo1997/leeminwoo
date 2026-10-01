@@ -8,6 +8,7 @@ from app.routes.inquiry import inquiry_bp
 from app.routes.cart import cart_bp
 from app.routes.auth import auth_bp
 from app.routes.chat import chat_bp
+from app.routes.admin import admin_bp
 
 # .env 파일에서 환경 변수 불러오기
 load_dotenv()
@@ -35,6 +36,7 @@ def create_app():
     app.register_blueprint(cart_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(admin_bp)
 
     # /mypage 및 /mypage/change-password 최상위 경로도 auth 모듈로 편리하게 직접 연결
     @app.route("/mypage", methods=["GET", "POST"])

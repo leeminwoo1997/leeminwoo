@@ -1,0 +1,131 @@
+{% extends "admin/base.html" %}
+
+{% block admin_content %}
+<!-- 문의 관리 헤더 -->
+<div class="admin-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1><i class="bi bi-chat-dots"></i> 문의 관리</h1>
+            <p class="text-muted">전체 {{ total_count }}건의 문의</p>
+        </div>
+    </div>
+</div>
+
+<!-- 필터 -->
+<div class="admin-card mb-4">
+    <div class="row g-3">
+        <div class="col-md-4">
+            <input type="text" class="form-control" placeholder="제목, 고객명 검색">
+        </div>
+        <div class="col-md-4">
+            <select class="form-select">
+                <option selected>카테고리: 전체</option>
+                <option>배송</option>
+                <option>반품/교환</option>
+                <option>상품 문의</option>
+                <option>결제</option>
+                <option>기타</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select">
+                <option selected>상태: 전체</option>
+                <option>미답변</option>
+                <option>답변됨</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- 문의 테이블 -->
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>문의ID</th>
+                    <th>제목</th>
+                    <th>카테고리</th>
+                    <th>고객명</th>
+                    <th>상태</th>
+                    <th>작성일</th>
+                    <th>작업</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if inquiries %}
+                    {% for inquiry in inquiries %}
+                    <tr>
+                        <td>
+                            <code>#{{ inquiry.id }}</code>
+                        </td>
+                        <td class="fw-bold" style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {{ inquiry.title }}
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ inquiry.category }}</span>
+                        </td>
+                        <td>{{ inquiry.user_name }}</td>
+                        <td>
+                            <span class="status-badge {% if inquiry.status == '미답변' %}status-pending{% else %}status-completed{% endif %}">
+                                {{ inquiry.status }}
+                            </span>
+                        </td>
+                        <td><small class="text-muted">{{ inquiry.created_at }}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="viewInquiry('{{ inquiry.id }}')">
+                                <i class="bi bi-eye"></i> 보기
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            문의가 없습니다.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 페이지네이션 -->
+{% if total_pages > 1 %}
+<nav aria-label="페이지 네비게이션" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.inquiries', page=1) }}">처음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.inquiries', page=page-1) }}">이전</a>
+            </li>
+        {% endif %}
+
+        {% for p in range(max(1, page-2), min(total_pages+1, page+3)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('admin.inquiries', page=p) }}">{{ p }}</a>
+            </li>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.inquiries', page=page+1) }}">다음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.inquiries', page=total_pages) }}">마지막</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+<script>
+function viewInquiry(inquiryId) {
+    alert('문의 상세 페이지 (준비 중)');
+    // 향후 구현
+}
+</script>
+{% endblock %}
