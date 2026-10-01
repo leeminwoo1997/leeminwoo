@@ -270,18 +270,25 @@ def naver_callback():
 
     saved_state = session.pop("naver_oauth_state", None)
 
-    if error or not code or not state or state != saved_state:
-        print(f"[경고] 네이버 OAuth 콜백 에러 또는 CSRF 불일치: error={error}, desc={error_description}", file=sys.stderr)
-        return redirect(url_for("auth.login", error="oauth_failed"))
+    if error:
+        print(f"[경고] 네이버 OAuth 콜백 에러: error={error}, desc={error_description}", file=sys.stderr)
+        return redirect(url_for("auth.login", error=f"네이버 로그인 실패: {error_description or error}"))
+
+    if not code:
+        return redirect(url_for("auth.login", error="네이버 인가 코드가 누락되었습니다."))
+
+    if not state or (saved_state and state != saved_state):
+        print(f"[경고] 네이버 OAuth CSRF 불일치: state={state}, saved={saved_state}", file=sys.stderr)
+        return redirect(url_for("auth.login", error="네이버 로그인 세션이 만료되었습니다. 다시 시도해주세요."))
 
     try:
         access_token = exchange_naver_code_for_token(code=code, state=state)
         if not access_token:
-            return redirect(url_for("auth.login", error="oauth_failed"))
+            return redirect(url_for("auth.login", error="네이버 액세스 토큰 발급에 실패했습니다. 키 설정을 확인해주세요."))
 
         profile = get_naver_user_profile(access_token)
         if not profile:
-            return redirect(url_for("auth.login", error="oauth_failed"))
+            return redirect(url_for("auth.login", error="네이버 프로필 정보를 조회할 수 없습니다."))
 
         naver_id = profile.get("id", "")
         email = profile.get("email") or f"naver_{naver_id[:12]}@naver.com"
@@ -314,10 +321,12 @@ def oauth_callback():
     """
     auth_code = request.args.get("code")
     error = request.args.get("error")
+    error_desc = request.args.get("error_description") or ""
 
     if error or not auth_code:
-        print(f"[경고] OAuth 콜백 에러 또는 인증 코드 누락: {error}", file=sys.stderr)
-        return redirect(url_for("auth.login", error="oauth_failed"))
+        print(f"[경고] OAuth 콜백 에러 또는 인증 코드 누락: error={error}, desc={error_desc}", file=sys.stderr)
+        err_msg = f"소셜 로그인 연동 실패: {error_desc or error or '인증 코드가 전달되지 않았습니다.'}"
+        return redirect(url_for("auth.login", error=err_msg))
 
     # 세션에서 저장해둔 PKCE code_verifier 및 provider 꺼내기
     code_verifier = session.pop("oauth_code_verifier", None)
@@ -345,10 +354,15 @@ def oauth_callback():
 
             return redirect(url_for("main.index", success=success_key))
 
-        return redirect(url_for("auth.login", error="oauth_failed"))
+        return redirect(url_for("auth.login", error="사용자 정보를 가져올 수 없습니다. 다시 시도해주세요."))
     except Exception as e:
         print(f"[에러] OAuth 콜백 처리 중 오류: {e}", file=sys.stderr)
-        return redirect(url_for("auth.login", error="oauth_failed"))
+        err_str = str(e)
+        if "PKCE" in err_str or "code_verifier" in err_str:
+            err_msg = "인증 세션이 만료되었습니다. 다시 로그인 버튼을 눌러 시도해주세요."
+        else:
+            err_msg = f"소셜 로그인 처리 중 오류가 발생했습니다 ({err_str[:80]})."
+        return redirect(url_for("auth.login", error=err_msg))
 
 
 @auth_bp.route("/confirm")

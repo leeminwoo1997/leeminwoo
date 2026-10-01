@@ -21,6 +21,10 @@ def create_app():
     # 기본 설정 적용
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "default-dev-secret-key")
 
+    # 소셜 로그인(OAuth) 외부 리다이렉트 후에도 세션 쿠키가 유지되도록 SameSite=Lax 설정
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"] = False  # HTTPS 환경에서는 ProxyFix와 함께 브라우저가 처리, 유연한 동작 지원
+
     # Azure App Service / 리버스 프록시 뒤에서 HTTPS 헤더(X-Forwarded-Proto, Host) 정상 인식
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
