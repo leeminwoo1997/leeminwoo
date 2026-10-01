@@ -66,8 +66,8 @@
                                                    class="form-control text-center bg-white" 
                                                    value="{{ item.quantity }}" 
                                                    min="1" max="{{ item.stock }}"
-                                                   onchange="handleQuantityChange('{{ item.id }}', {{ item.stock }})"
-                                                   onkeydown="handleQuantityKeydown(event, '{{ item.id }}', {{ item.stock }})"
+                                                   onchange="handleQuantityChange('{{ item.id }}', '{{ item.stock }}')"
+                                                   onkeydown="handleQuantityKeydown(event, '{{ item.id }}', '{{ item.stock }}')"
                                                    {% if item.is_out_of_stock %}disabled{% endif %}>
                                             <button class="btn btn-outline-secondary" type="button" 
                                                     onclick="changeQuantity('{{ item.id }}', parseInt(document.getElementById('qty-{{ item.id }}').value, 10) + 1)"
