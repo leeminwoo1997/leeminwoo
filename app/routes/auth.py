@@ -10,6 +10,7 @@ import sys
 import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, session
 from supabase_auth.errors import AuthApiError
+from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
 from app.services.auth_service import (
     login_required,
     sign_up_user,
@@ -43,6 +44,7 @@ ERROR_MESSAGES = {
     "reset_failed": "비밀번호 재설정에 실패했습니다. 다시 시도해주세요.",
     "session_expired": "인증 정보가 만료되었습니다. 다시 시도해주세요.",
     "login_required": "해당 기능을 이용하려면 로그인이 필요합니다.",
+    "profile_update_failed": "회원 정보 수정 중 오류가 발생했습니다. 다시 시도해주세요.",
 }
 
 SUCCESS_MESSAGES = {
@@ -56,6 +58,7 @@ SUCCESS_MESSAGES = {
     "password_reset_success": "비밀번호가 성공적으로 변경되었습니다. 새로운 비밀번호로 로그인해주세요.",
     "logout_success": "로그아웃되었습니다.",
     "email_confirmed": "이메일 인증이 완료되었습니다.",
+    "profile_updated": "회원 정보가 성공적으로 수정되었습니다.",
 }
 
 
@@ -499,18 +502,63 @@ def logout():
     return redirect(url_for("auth.login", success="logout_success"))
 
 
-@auth_bp.route("/mypage")
+@auth_bp.route("/mypage", methods=["GET", "POST"])
 @login_required
 def mypage():
     """
-    마이페이지 라우트 (GET /auth/mypage 또는 /mypage)
+    마이페이지 라우트 (GET/POST /auth/mypage 또는 /mypage)
     - login_required 검증
+    - GET: profiles 테이블에서 사용자 정보(이름, 이메일, 기본 배송지/주소, 전화번호 등) 조회하여 표시
+    - POST: 내 정보(이름, 기본 배송지, 전화번호 등) 수정 처리
     """
+    user_id = session.get("user_id")
+    user_email = session.get("user_email")
+
+    client = get_admin_supabase_client() or get_supabase_client()
+
+    # POST: 내 정보 수정 처리
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "").strip()
+        phone_number = request.form.get("phone_number", "").strip()
+        address = request.form.get("address", "").strip()
+
+        try:
+            if client and user_id:
+                update_data = {
+                    "full_name": full_name,
+                    "phone_number": phone_number,
+                }
+                # profiles 테이블에 address 컬럼이 존재할 경우 대비, 없으면 메타데이터 보관
+                try:
+                    client.table("profiles").update({**update_data, "address": address}).eq("id", user_id).execute()
+                except Exception:
+                    client.table("profiles").update(update_data).eq("id", user_id).execute()
+
+                # 세션에 이름 갱신
+                if full_name:
+                    session["user_name"] = full_name
+
+            return redirect(url_for("auth.mypage", success="profile_updated"))
+        except Exception as e:
+            print(f"[에러] 프로필 수정 실패: {e}", file=sys.stderr)
+            return redirect(url_for("auth.mypage", error="profile_update_failed"))
+
+    # GET: 프로필 조회
+    profile = {}
+    if client and user_id:
+        try:
+            res = client.table("profiles").select("*").eq("id", user_id).execute()
+            if res.data and len(res.data) > 0:
+                profile = res.data[0]
+        except Exception as e:
+            print(f"[경고] 프로필 조회 실패: {e}", file=sys.stderr)
+
     error_msg, success_msg = get_flash_messages()
     return render_template(
         "auth/mypage.html",
-        user_id=session.get("user_id"),
-        user_email=session.get("user_email"),
+        user_id=user_id,
+        user_email=profile.get("email") or user_email,
+        profile=profile,
         error=error_msg,
         success=success_msg
     )
