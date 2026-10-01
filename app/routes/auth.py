@@ -51,7 +51,7 @@ ERROR_MESSAGES = {
 }
 
 SUCCESS_MESSAGES = {
-    "login_success": "로그인되었습니다. VIBE FASHION에 오신 것을 환영합니다!",
+    "login_success": "로그인되었습니다. Young Style에 오신 것을 환영합니다!",
     "kakao_login_success": "카카오 계정으로 성공적으로 로그인되었습니다!",
     "google_login_success": "구글 계정으로 성공적으로 로그인되었습니다!",
     "naver_login_success": "네이버 계정으로 성공적으로 로그인되었습니다!",
