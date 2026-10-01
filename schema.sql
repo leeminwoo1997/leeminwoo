@@ -439,6 +439,47 @@ create policy "공개 프로필 조회 허용" on public.profiles
 create policy "본인 프로필만 수정 허용" on public.profiles
     for update using (auth.uid() = id);
 
+-- ============================================================================
+-- 7. 챗봇 메시지 테이블 (chat_messages)
+-- ============================================================================
+
+-- 7-1. 챗봇 메시지 테이블 생성
+create table if not exists public.chat_messages (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references public.profiles(id) on delete cascade,
+    sender_type varchar(20) not null check (sender_type in ('user', 'bot')),
+    content text not null,
+    category varchar(50),
+    is_read boolean default false,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+-- 7-2. 챗봇 메시지 테이블 인덱스
+create index idx_chat_messages_user_id on public.chat_messages(user_id);
+create index idx_chat_messages_created_at on public.chat_messages(created_at desc);
+create index idx_chat_messages_sender_type on public.chat_messages(sender_type);
+
+-- 7-3. 챗봇 메시지 테이블 RLS 활성화
+alter table public.chat_messages enable row level security;
+
+-- 7-4. 챗봇 메시지 정책
+-- 본인 메시지만 조회
+create policy "본인 메시지만 조회" on public.chat_messages
+    for select using (auth.uid() = user_id or auth.uid() is null);
+
+-- 본인 메시지만 생성
+create policy "본인 메시지만 생성" on public.chat_messages
+    for insert with check (auth.uid() = user_id or auth.uid() is null);
+
+-- 본인 메시지만 수정
+create policy "본인 메시지만 수정" on public.chat_messages
+    for update using (auth.uid() = user_id or auth.uid() is null);
+
+-- 본인 메시지만 삭제
+create policy "본인 메시지만 삭제" on public.chat_messages
+    for delete using (auth.uid() = user_id or auth.uid() is null);
+
 -- 6-3. 상품 및 카테고리 (categories, products, options, images) 정책
 create policy "카테고리 누구나 조회 가능" on public.categories
     for select using (is_active = true);

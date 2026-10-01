@@ -127,4 +127,49 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
+    <!-- 플로팅 챗봇 위젯 -->
+    <div id="chatbot-widget" class="chatbot-widget">
+        <!-- 챗봇 헤더 (닫기/열기) -->
+        <div class="chatbot-header" onclick="toggleChatbot()">
+            <div class="chatbot-header-content">
+                <i class="bi bi-chat-dots-fill"></i>
+                <span>Young Style 고객센터</span>
+            </div>
+            <button class="chatbot-close-btn" id="chatbot-toggle-btn">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        </div>
+
+        <!-- 챗봇 메시지 영역 -->
+        <div class="chatbot-messages" id="chatbot-messages">
+            <div class="chatbot-message bot-message">
+                <div class="message-content">
+                    안녕하세요! 👋 Young Style 고객센터입니다.
+                    어떤 도움을 드릴까요?
+                </div>
+            </div>
+        </div>
+
+        <!-- 빠른 응답 버튼 -->
+        <div class="chatbot-quick-replies" id="chatbot-quick-replies"></div>
+
+        <!-- 입력 영역 -->
+        <div class="chatbot-input">
+            <input 
+                type="text" 
+                id="chatbot-input-field" 
+                class="chatbot-input-field" 
+                placeholder="메시지를 입력하세요..."
+                onkeypress="handleChatbotKeypress(event)">
+            <button class="chatbot-send-btn" onclick="sendChatbotMessage()">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 플로팅 챗봇 스타일 및 스크립트 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+    <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+
 </html>
+
