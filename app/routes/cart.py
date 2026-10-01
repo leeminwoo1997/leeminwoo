@@ -1,12 +1,13 @@
 """
 장바구니(Cart) 라우트 블루프린트
-- GET /cart : 장바구니 페이지 렌더링
+- GET /cart : 장바구니 페이지 렌더링 (Supabase carts 테이블 JOIN 조회)
 - GET /cart/api/summary : 현재 장바구니 요약 정보 JSON 반환 (비동기 연동용)
-- POST /cart/api/add : 장바구니 상품 추가 API
-- PATCH /cart/<cart_id> : 장바구니 수량 변경 API (Supabase carts 테이블 직접 UPDATE)
-- POST /cart/api/update : 장바구니 수량 변경 API (기존 세션 기반)
-- POST /cart/api/remove : 장바구니 상품 삭제 API
-- POST /cart/api/clear : 장바구니 비우기 API
+- POST /cart/api/add : 장바구니 상품 추가 API (Supabase carts 테이블 upsert)
+- PATCH /cart/<cart_id> : 장바구니 수량 변경 API (Supabase carts 테이블 UPDATE)
+- DELETE /cart/<cart_id> : 장바구니 아이템 삭제 API (Supabase carts 테이블 DELETE)
+- POST /cart/api/update : 장바구니 수량 변경 API (기존 세션 기반, 레거시)
+- POST /cart/api/remove : 장바구니 상품 삭제 API (기존 세션 기반, 레거시)
+- POST /cart/api/clear : 장바구니 비우기 API (기존 세션 기반, 레거시)
 """
 
 import sys
@@ -24,9 +25,144 @@ cart_bp = Blueprint("cart", __name__, url_prefix="/cart")
 
 @cart_bp.route("/")
 def view_cart():
-    """장바구니 전체 페이지 렌더링"""
-    summary = get_cart_summary()
-    return render_template("cart.html", cart=summary)
+    """
+    장바구니 페이지 렌더링
+    - Supabase carts 테이블에서 로그인 사용자의 장바구니 항목 조회
+    - carts + product_options + products JOIN으로 모든 필요한 정보 취득
+    - 각 아이템: 상품명, 색상, 사이즈, 수량, 단가, 소계, 재고 상태
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        # 로그인하지 않은 사용자는 세션 기반 장바구니 사용
+        from app.services.cart_service import get_cart_summary
+        summary = get_cart_summary()
+        return render_template("cart.html", cart=summary, is_guest=True)
+
+    admin = get_admin_supabase_client() or get_supabase_client()
+    if not admin:
+        # DB 연결 실패 시 세션 기반으로 폴백
+        from app.services.cart_service import get_cart_summary
+        summary = get_cart_summary()
+        return render_template("cart.html", cart=summary, is_guest=True)
+
+    try:
+        # carts + product_options + products JOIN 조회
+        cart_res = admin.table("carts").select(
+            "id, product_option_id, quantity"
+        ).eq("user_id", user_id).execute()
+
+        if not cart_res.data:
+            # 빈 장바구니
+            return render_template("cart.html", cart={
+                "cart_items": [],
+                "items_count": 0,
+                "total_quantity": 0,
+                "total_price": "0원",
+                "total_price_num": 0,
+                "shipping_fee": "무료",
+                "shipping_fee_num": 0,
+                "final_price": "0원",
+                "final_price_num": 0,
+                "has_out_of_stock": False
+            }, is_guest=False)
+
+        # 각 cart 항목에서 product_option_id로 product_options, products 정보 조회
+        cart_items = []
+        total_price = 0
+        total_quantity = 0
+        has_out_of_stock = False
+
+        for cart_item in cart_res.data:
+            product_option_id = cart_item["product_option_id"]
+            quantity = cart_item["quantity"]
+
+            # product_options 조회
+            opt_res = admin.table("product_options").select(
+                "id, product_id, color, size, stock, stock_quantity, additional_price"
+            ).eq("id", product_option_id).execute()
+
+            if not opt_res.data:
+                continue
+
+            option = opt_res.data[0]
+            product_id = option["product_id"]
+            stock = option.get("stock")
+            if stock is None:
+                stock = option.get("stock_quantity") or 0
+            stock = max(0, int(stock))
+
+            # products 조회
+            prod_res = admin.table("products").select(
+                "id, name, price, discount_rate"
+            ).eq("id", product_id).execute()
+
+            if not prod_res.data:
+                continue
+
+            product = prod_res.data[0]
+
+            # 할인가 계산
+            price = product["price"]
+            discount_rate = product.get("discount_rate", 0) or 0
+            discounted_price = int(price * (1 - discount_rate / 100))
+
+            # 상품 이미지 조회 (primary image)
+            img_res = admin.table("product_images").select(
+                "id, image_url"
+            ).eq("product_id", product_id).eq("is_primary", True).limit(1).execute()
+            thumbnail_url = img_res.data[0]["image_url"] if img_res.data else "https://via.placeholder.com/70x80"
+
+            subtotal = discounted_price * quantity
+            total_price += subtotal
+            total_quantity += quantity
+
+            # 재고 상태 확인
+            is_out_of_stock = stock == 0
+            if is_out_of_stock:
+                has_out_of_stock = True
+
+            cart_items.append({
+                "id": cart_item["id"],  # cart table의 id (PATCH/DELETE용)
+                "product_option_id": product_option_id,
+                "product_id": product_id,
+                "name": product["name"],
+                "color": option.get("color", ""),
+                "size": option.get("size", ""),
+                "quantity": quantity,
+                "price": f"{discounted_price:,}원",
+                "price_num": discounted_price,
+                "subtotal": f"{subtotal:,}원",
+                "subtotal_num": subtotal,
+                "thumbnail_url": thumbnail_url,
+                "stock": stock,
+                "is_out_of_stock": is_out_of_stock
+            })
+
+        # 배송비 계산 (50,000원 이상 무료, 미만 3,000원)
+        shipping_fee = 0 if total_price >= 50000 else 3000
+        final_price = total_price + shipping_fee
+
+        cart_summary = {
+            "cart_items": cart_items,
+            "items_count": len(cart_items),
+            "total_quantity": total_quantity,
+            "total_price": f"{total_price:,}원",
+            "total_price_num": total_price,
+            "shipping_fee": f"{shipping_fee:,}원" if shipping_fee > 0 else "무료",
+            "shipping_fee_num": shipping_fee,
+            "final_price": f"{final_price:,}원",
+            "final_price_num": final_price,
+            "has_out_of_stock": has_out_of_stock
+        }
+
+        return render_template("cart.html", cart=cart_summary, is_guest=False)
+
+    except Exception as e:
+        print(f"[에러] 장바구니 조회 실패: {e}", file=sys.stderr)
+        # 에러 시 세션 기반으로 폴백
+        from app.services.cart_service import get_cart_summary
+        summary = get_cart_summary()
+        return render_template("cart.html", cart=summary, is_guest=True)
 
 @cart_bp.route("/api/summary", methods=["GET"])
 def api_summary():
@@ -249,6 +385,46 @@ def update_cart_quantity(cart_id: str):
     except Exception as e:
         print(f"[에러] 장바구니 수량 변경 실패: {e}", file=sys.stderr)
         return jsonify({"success": False, "message": "장바구니 수량 변경 중 오류가 발생했습니다."}), 500
+
+
+@cart_bp.route("/<cart_id>", methods=["DELETE"])
+def delete_cart_item(cart_id: str):
+    """
+    [장바구니 아이템 삭제 API (DELETE)]
+    - 요청 URL: DELETE /cart/<cart_id>
+    - 본인 소유의 장바구니 아이템인지 확인 (403 if mismatch)
+    - 성공 시 DELETE 후 성공 메시지 반환
+    """
+    # 1. 로그인 확인
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
+
+    admin = get_admin_supabase_client() or get_supabase_client()
+    if not admin:
+        return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+    try:
+        # 2. 본인 소유의 장바구니 아이템인지 확인
+        cart_res = admin.table("carts").select("id, user_id").eq("id", cart_id).execute()
+        if not cart_res.data:
+            return jsonify({"success": False, "message": "존재하지 않는 장바구니 항목입니다."}), 404
+
+        cart_item = cart_res.data[0]
+        if cart_item["user_id"] != user_id:
+            return jsonify({"success": False, "message": "해당 장바구니 항목에 접근 권한이 없습니다."}), 403
+
+        # 3. DELETE 처리
+        admin.table("carts").delete().eq("id", cart_id).execute()
+
+        return jsonify({
+            "success": True,
+            "message": "상품이 장바구니에서 삭제되었습니다."
+        })
+
+    except Exception as e:
+        print(f"[에러] 장바구니 삭제 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": "장바구니 삭제 중 오류가 발생했습니다."}), 500
 
 @cart_bp.route("/api/update", methods=["POST"])
 def api_update():

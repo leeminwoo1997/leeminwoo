@@ -50,15 +50,22 @@
                                             <img src="{{ item.thumbnail_url }}" alt="{{ item.name }}" class="rounded-3 object-fit-cover shadow-sm" style="width: 70px; height: 80px;">
                                             <div>
                                                 <h6 class="fw-bold mb-1 text-dark">{{ item.name }}</h6>
-                                                <small class="text-muted">{{ item.price }}</small>
+                                                <small class="text-muted">색상: {{ item.color }} / 사이즈: {{ item.size }}</small>
+                                                {% if item.is_out_of_stock %}
+                                                <br><span class="badge bg-secondary ms-0 mt-2">품절됨</span>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     </td>
                                     <td class="text-center">
                                         <div class="input-group input-group-sm justify-content-center mx-auto" style="max-width: 110px;">
-                                            <button class="btn btn-outline-secondary" type="button" onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) - 1)">-</button>
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) - 1)"
+                                                    {% if item.is_out_of_stock %}disabled{% endif %}>-</button>
                                             <input type="text" class="form-control text-center bg-white" value="{{ item.quantity }}" readonly style="max-width: 45px;">
-                                            <button class="btn btn-outline-secondary" type="button" onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) + 1)">+</button>
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    onclick="changeQuantity('{{ item.id }}', parseInt('{{ item.quantity }}', 10) + 1)"
+                                                    {% if item.is_out_of_stock %}disabled{% endif %}>+</button>
                                         </div>
                                     </td>
                                     <td class="text-end fw-bold text-dark pe-3" id="subtotal-{{ item.id }}">
@@ -105,12 +112,20 @@
                     <span class="fw-bold fs-3 text-danger" id="summary-final-price">{{ cart.final_price }}</span>
                 </div>
 
-                <button class="btn btn-dark btn-lg w-100 rounded-pill fw-bold shadow-sm mb-2" onclick="orderCart()">
+                <button class="btn btn-dark btn-lg w-100 rounded-pill fw-bold shadow-sm mb-2" 
+                        onclick="orderCart()"
+                        {% if cart.has_out_of_stock %}disabled{% endif %}>
                     <i class="bi bi-credit-card me-1"></i> 바로 주문하기
                 </button>
+                {% if cart.has_out_of_stock %}
+                <p class="alert alert-warning mb-0 mt-2 p-2 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i> 품절된 상품이 있어 주문할 수 없습니다. 품절 상품을 제거한 후 주문해주세요.
+                </p>
+                {% else %}
                 <p class="text-center text-muted small mt-2 mb-0">
                     <i class="bi bi-shield-check me-1"></i> 안심 결제 보장 시스템 적용
                 </p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -157,21 +172,28 @@ async function changeQuantity(cartId, quantity) {
     }
 }
 
-// 개별 상품 삭제 함수
-async function removeCartItem(productId) {
+// 개별 상품 삭제 함수 (DELETE API)
+async function removeCartItem(cartId) {
     if (!confirm('이 상품을 장바구니에서 삭제하시겠습니까?')) return;
     try {
-        const res = await fetch("{{ url_for('cart.api_remove') }}", {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({product_id: productId})
+        const res = await fetch(`/cart/${cartId}`, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'}
         });
         const data = await res.json();
         if (data.success) {
+            // 삭제 성공 시 해당 행 제거
+            const row = document.getElementById(`cart-row-${cartId}`);
+            if (row) {
+                row.remove();
+            }
+            // 페이지 리로드로 합계 업데이트
             location.reload();
+        } else {
+            alert(data.message || '삭제 처리 중 오류가 발생했습니다.');
         }
     } catch (e) {
-        alert('삭제 처리 중 오류가 발생했습니다.');
+        alert('삭제 처리 중 오류가 발생했습니다: ' + e.message);
     }
 }
 
