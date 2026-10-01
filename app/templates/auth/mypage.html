@@ -95,15 +95,55 @@
                                 <input type="text" class="form-control" id="address" name="address" value="{{ (profile and profile.address) or '' }}" placeholder="기본 배송지 주소를 입력하세요">
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                                <a href="{{ url_for('auth.reset_password') }}" class="btn btn-outline-secondary rounded-3 btn-sm">
-                                    <i class="bi bi-shield-lock me-1"></i> 비밀번호 변경
-                                </a>
+                            <div class="d-flex justify-content-end align-items-center pt-2">
                                 <button type="submit" class="btn btn-dark rounded-3 px-4">
                                     <i class="bi bi-check-lg me-1"></i> 정보 수정 저장
                                 </button>
                             </div>
                         </form>
+
+                        <!-- 비밀번호 변경 섹션 (이메일/비밀번호 가입 사용자에게만 표시) -->
+                        {% if is_email_user %}
+                        <div class="mt-5 pt-4 border-top">
+                            <h5 class="fw-bold mb-2 d-flex align-items-center">
+                                <i class="bi bi-shield-lock me-2 text-dark"></i> 비밀번호 변경
+                            </h5>
+                            <p class="text-muted small mb-4">현재 비밀번호를 확인한 후 새로운 비밀번호로 변경할 수 있습니다.</p>
+
+                            <form method="POST" action="{{ url_for('auth.change_password') }}">
+                                <div class="mb-3">
+                                    <label for="current_password" class="form-label fw-semibold">기존 비밀번호</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
+                                        <input type="password" class="form-control" id="current_password" name="current_password" placeholder="현재 비밀번호를 입력하세요" required>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="new_password" class="form-label fw-semibold">새 비밀번호</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
+                                        <input type="password" class="form-control" id="new_password" name="new_password" placeholder="새 비밀번호를 입력하세요 (최소 6자 이상)" required minlength="6">
+                                    </div>
+                                    <div class="form-text text-muted">비밀번호는 최소 6자 이상이어야 합니다.</div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label for="new_password_confirm" class="form-label fw-semibold">새 비밀번호 확인</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light"><i class="bi bi-lock-fill"></i></span>
+                                        <input type="password" class="form-control" id="new_password_confirm" name="new_password_confirm" placeholder="새 비밀번호를 다시 한 번 입력하세요" required minlength="6">
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-dark rounded-3 px-4">
+                                        <i class="bi bi-arrow-repeat me-1"></i> 비밀번호 변경
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- 탭 2: 주문 내역 ("아직 주문 내역이 없습니다" 안내 문구만) -->

@@ -45,6 +45,9 @@ ERROR_MESSAGES = {
     "session_expired": "인증 정보가 만료되었습니다. 다시 시도해주세요.",
     "login_required": "해당 기능을 이용하려면 로그인이 필요합니다.",
     "profile_update_failed": "회원 정보 수정 중 오류가 발생했습니다. 다시 시도해주세요.",
+    "current_password_mismatch": "현재 비밀번호가 일치하지 않습니다.",
+    "same_as_current_password": "새로운 비밀번호가 현재 비밀번호와 동일합니다.",
+    "password_change_failed": "비밀번호 변경 중 오류가 발생했습니다. 다시 시도해주세요.",
 }
 
 SUCCESS_MESSAGES = {
@@ -59,6 +62,7 @@ SUCCESS_MESSAGES = {
     "logout_success": "로그아웃되었습니다.",
     "email_confirmed": "이메일 인증이 완료되었습니다.",
     "profile_updated": "회원 정보가 성공적으로 수정되었습니다.",
+    "password_changed": "비밀번호가 변경되었습니다.",
 }
 
 
@@ -545,6 +549,8 @@ def mypage():
 
     # GET: 프로필 조회
     profile = {}
+    is_email_user = False
+
     if client and user_id:
         try:
             res = client.table("profiles").select("*").eq("id", user_id).execute()
@@ -553,12 +559,96 @@ def mypage():
         except Exception as e:
             print(f"[경고] 프로필 조회 실패: {e}", file=sys.stderr)
 
+        # 이메일/비밀번호 가입 여부 확인 (소셜 전용 계정 여부 판별)
+        try:
+            admin_client = get_admin_supabase_client()
+            if admin_client:
+                auth_user_resp = admin_client.auth.admin.get_user_by_id(user_id)
+                auth_user = getattr(auth_user_resp, "user", None) or auth_user_resp
+                if auth_user:
+                    app_meta = getattr(auth_user, "app_metadata", {}) or {}
+                    providers = app_meta.get("providers", [])
+                    primary_prov = app_meta.get("provider", "")
+                    identities = getattr(auth_user, "identities", []) or []
+                    has_email_identity = any(getattr(i, "provider", "") == "email" for i in identities)
+                    if "email" in providers or primary_prov == "email" or has_email_identity:
+                        is_email_user = True
+        except Exception as e:
+            print(f"[경고] 사용자 인증 프로바이더 조회 실패: {e}", file=sys.stderr)
+            is_email_user = not bool(session.get("oauth_provider"))
+
     error_msg, success_msg = get_flash_messages()
     return render_template(
         "auth/mypage.html",
         user_id=user_id,
         user_email=profile.get("email") or user_email,
         profile=profile,
+        is_email_user=is_email_user,
         error=error_msg,
         success=success_msg
     )
+
+
+@auth_bp.route("/mypage/change-password", methods=["POST"])
+@login_required
+def change_password():
+    """
+    [POST /mypage/change-password 또는 /auth/mypage/change-password]
+    - 기존 비밀번호 검증 (Supabase 재로그인 방식)
+    - 새 비밀번호 검증 (Day 4 가입 규칙과 동일: 필수, 일치, 6자 이상)
+    - 새 비밀번호 != 기존 비밀번호 검증
+    - Supabase update_user_by_id()를 통한 비밀번호 변경
+    """
+    user_id = session.get("user_id")
+    user_email = session.get("user_email")
+
+    current_password = request.form.get("current_password", "").strip()
+    new_password = request.form.get("new_password", "").strip()
+    new_password_confirm = request.form.get("new_password_confirm", "").strip()
+
+    # 1. 필수 입력 필드 검증
+    if not current_password or not new_password or not new_password_confirm:
+        return redirect(url_for("auth.mypage", error="missing_fields"))
+
+    # 2. 새 비밀번호와 기존 비밀번호 동일 여부 검증
+    if current_password == new_password:
+        return redirect(url_for("auth.mypage", error="same_as_current_password"))
+
+    # 3. 새 비밀번호 확인 일치 여부
+    if new_password != new_password_confirm:
+        return redirect(url_for("auth.mypage", error="password_mismatch"))
+
+    # 4. 새 비밀번호 길이 검증 (최소 6자 이상)
+    if len(new_password) < 6:
+        return redirect(url_for("auth.mypage", error="weak_password"))
+
+    # 이메일 주소 확인
+    admin = get_admin_supabase_client()
+    if not user_email and admin and user_id:
+        try:
+            u_resp = admin.auth.admin.get_user_by_id(user_id)
+            u = getattr(u_resp, "user", None) or u_resp
+            if u and hasattr(u, "email") and u.email:
+                user_email = u.email
+        except Exception:
+            pass
+
+    if not user_email:
+        return redirect(url_for("auth.mypage", error="session_expired"))
+
+    # 5. 기존 비밀번호 검증 (Supabase 재로그인 시도)
+    try:
+        sign_in_user(email=user_email, password=current_password)
+    except (AuthApiError, Exception) as e:
+        print(f"[경고] 기존 비밀번호 검증 실패: {e}", file=sys.stderr)
+        return redirect(url_for("auth.mypage", error="current_password_mismatch"))
+
+    # 6. Supabase admin.update_user_by_id()로 새 비밀번호 반영
+    try:
+        if not admin:
+            raise ValueError("Supabase 관리자 클라이언트를 초기화할 수 없습니다.")
+        admin.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        return redirect(url_for("auth.mypage", success="password_changed"))
+    except Exception as e:
+        print(f"[에러] 비밀번호 변경 처리 오류: {e}", file=sys.stderr)
+        return redirect(url_for("auth.mypage", error="password_change_failed"))

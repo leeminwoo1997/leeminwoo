@@ -34,10 +34,16 @@ def create_app():
     app.register_blueprint(cart_bp)
     app.register_blueprint(auth_bp)
 
-    # /mypage 최상위 경로도 auth.mypage로 편리하게 접근할 수 있도록 라우트 추가
-    @app.route("/mypage")
+    # /mypage 및 /mypage/change-password 최상위 경로도 auth 모듈로 편리하게 직접 연결
+    @app.route("/mypage", methods=["GET", "POST"])
     def top_mypage():
-        return redirect(url_for("auth.mypage"))
+        from app.routes.auth import mypage
+        return mypage()
+
+    @app.route("/mypage/change-password", methods=["POST"])
+    def top_change_password():
+        from app.routes.auth import change_password
+        return change_password()
 
     # 모든 템플릿에서 장바구니 요약 정보에 접근할 수 있도록 컨텍스트 프로세서 등록
     @app.context_processor
