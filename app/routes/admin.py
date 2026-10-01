@@ -31,6 +31,9 @@ def dashboard():
         "today_revenue": 0
     }
     
+    # 최근 주문 초기화
+    recent_orders = []
+    
     try:
         # 전체 주문 수
         orders_res = supabase.table("orders").select("id").execute()
