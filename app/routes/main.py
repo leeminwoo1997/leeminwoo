@@ -226,3 +226,19 @@ def get_product_sizes_by_color(product_id: str):
         print(f"[에러] 색상별 사이즈 조회 실패: {e}", file=sys.stderr)
         return jsonify({"error": "옵션을 조회할 수 없습니다."}), 500
 
+
+@main_bp.route("/chat")
+def chatbot():
+    """
+    [챗봇 페이지 라우트]
+    - GET /chat
+    - chatbot.html 템플릿 렌더링
+    - 사용자가 챗봇과 상호작용할 수 있는 인터페이스 제공
+    """
+    error_msg, success_msg = get_flash_messages()
+    return render_template(
+        "chatbot.html",
+        error=error_msg,
+        success=success_msg
+    )
+

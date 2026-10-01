@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}챗봇 - Young Style{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 900px;">
+    <!-- 페이지 헤더 -->
+    <div class="mb-4 pb-3 border-bottom">
+        <h1 class="fw-bold text-dark mb-2">
+            <i class="bi bi-chat-dots-fill text-primary me-2"></i> Young Style 챗봇
+        </h1>
+        <p class="text-muted mb-0">상품, 배송, 주문 등 무엇이든 물어보세요! 24시간 운영 중입니다. 😊</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- 왼쪽: 채팅 영역 -->
+        <div class="col-lg-8">
+            <!-- 채팅 히스토리 -->
+            <div class="card border-0 shadow-sm rounded-4 bg-white" style="height: 600px; display: flex; flex-direction: column;">
+                <!-- 채팅 메시지 영역 -->
+                <div id="chat-messages" class="flex-grow-1 p-4 overflow-auto" style="background-color: #f8f9fa;">
+                    <!-- 초기 인사말 -->
+                    <div class="d-flex mb-3">
+                        <div class="bg-primary text-white rounded-3 p-3 ms-2" style="max-width: 70%; border-radius: 15px 15px 15px 0;">
+                            <p class="mb-0 small">
+                                안녕하세요! 👋<br>
+                                Young Style 챗봇입니다.<br><br>
+                                배송, 반품, 상품, 주문, 회원가입 등<br>
+                                무엇을 도와드릴까요?
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 입력 영역 -->
+                <div class="border-top p-3 bg-white rounded-bottom-4">
+                    <div class="input-group">
+                        <input type="text" id="message-input" class="form-control rounded-pill border-2" 
+                               placeholder="메시지를 입력하세요..." 
+                               onkeypress="handleKeypress(event)">
+                        <button class="btn btn-primary rounded-pill px-4" id="send-btn" onclick="sendMessage()">
+                            <i class="bi bi-send-fill"></i> 전송
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 빠른 질문 버튼 -->
+            <div class="mt-4">
+                <p class="text-muted small fw-semibold mb-2">자주 묻는 질문:</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" onclick="quickQuestion('배송비는 얼마인가요?')">
+                        <i class="bi bi-question-circle me-1"></i> 배송비
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" onclick="quickQuestion('반품은 어떻게 하나요?')">
+                        <i class="bi bi-arrow-left-right me-1"></i> 반품
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" onclick="quickQuestion('신상품을 추천해줄 수 있나요?')">
+                        <i class="bi bi-star me-1"></i> 신상품
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" onclick="quickQuestion('주문을 취소하고 싶어요')">
+                        <i class="bi bi-x-circle me-1"></i> 주문취소
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 정보 패널 -->
+        <div class="col-lg-4">
+            <!-- 고객센터 정보 카드 -->
+            <div class="card border-0 shadow-sm rounded-4 bg-white mb-4 p-4">
+                <h5 class="fw-bold text-dark mb-3">
+                    <i class="bi bi-headset text-primary me-2"></i> 고객센터
+                </h5>
+                <div class="mb-3">
+                    <p class="text-muted small mb-2">📞 전화</p>
+                    <p class="fw-semibold text-dark">010-1234-5678</p>
+                    <p class="text-muted small">평일 10:00 - 18:00<br>토요일 10:00 - 15:00<br>(일요일, 공휴일 휴무)</p>
+                </div>
+                <hr>
+                <div class="mb-3">
+                    <p class="text-muted small mb-2">📧 이메일</p>
+                    <p class="fw-semibold text-dark">support@youngstyle.com</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('inquiry.list_inquiries') }}" class="btn btn-outline-primary btn-sm w-100 rounded-pill">
+                        <i class="bi bi-chat-left me-1"></i> 문의게시판 가기
+                    </a>
+                </div>
+            </div>
+
+            <!-- 도움말 카드 -->
+            <div class="card border-0 shadow-sm rounded-4 bg-light p-4">
+                <h5 class="fw-bold text-dark mb-3">
+                    <i class="bi bi-lightbulb text-warning me-2"></i> 도움말
+                </h5>
+                <ul class="list-unstyled small">
+                    <li class="mb-2">
+                        <span class="text-muted">💡</span>
+                        <span class="text-dark">질문은 자연스럽게 입력하세요.</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="text-muted">💡</span>
+                        <span class="text-dark">상세한 질문이 더 정확한 답변을 받을 수 있습니다.</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="text-muted">💡</span>
+                        <span class="text-dark">챗봇이 답변 못한 것은 고객센터로 문의하세요.</span>
+                    </li>
+                    <li>
+                        <span class="text-muted">💡</span>
+                        <span class="text-dark">24시간 이내에 답변해드립니다.</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- FAQ 링크 -->
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mt-4">
+                <h5 class="fw-bold text-dark mb-3">
+                    <i class="bi bi-book text-info me-2"></i> 자주 묻는 질문
+                </h5>
+                <ul class="list-unstyled small">
+                    <li class="mb-2">
+                        <a href="#" onclick="quickQuestion('배송비는 얼마인가요?'); return false;" class="text-decoration-none text-primary">
+                            배송비 정보
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" onclick="quickQuestion('반품은 어떻게 하나요?'); return false;" class="text-decoration-none text-primary">
+                            반품/교환
+                        </a>
+                    </li>
+                    <li class="mb-2">
+                        <a href="#" onclick="quickQuestion('회원가입은 어떻게 하나요?'); return false;" class="text-decoration-none text-primary">
+                            회원가입
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" onclick="quickQuestion('사이즈 표를 보고 싶어요'); return false;" class="text-decoration-none text-primary">
+                            사이즈 가이드
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// 메시지 전송 함수
+async function sendMessage() {
+    const input = document.getElementById('message-input');
+    const message = input.value.trim();
+    
+    if (!message) {
+        alert('메시지를 입력해주세요.');
+        return;
+    }
+    
+    // 사용자 메시지 화면에 표시
+    displayMessage(message, 'user');
+    input.value = '';
+    
+    try {
+        // 챗봇 응답 요청
+        const res = await fetch('/chat/api/messages', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: message})
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.bot_response) {
+            // 챗봇 응답 표시
+            displayMessage(data.bot_response.content, 'bot');
+        } else {
+            displayMessage('죄송합니다. 요청을 처리하는 중에 오류가 발생했습니다.', 'bot');
+        }
+    } catch (e) {
+        console.error('Error:', e);
+        displayMessage('오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'bot');
+    }
+}
+
+// 메시지 표시 함수
+function displayMessage(text, sender) {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `d-flex mb-3 ${sender === 'user' ? 'justify-content-end' : ''}`;
+    
+    const contentDiv = document.createElement('div');
+    if (sender === 'user') {
+        contentDiv.className = 'bg-primary text-white rounded-3 p-3 me-2';
+        contentDiv.style.maxWidth = '70%';
+        contentDiv.style.borderRadius = '15px 15px 0 15px';
+    } else {
+        contentDiv.className = 'bg-light text-dark rounded-3 p-3 ms-2';
+        contentDiv.style.maxWidth = '70%';
+        contentDiv.style.borderRadius = '15px 15px 15px 0';
+    }
+    
+    contentDiv.innerHTML = `<p class="mb-0 small">${escapeHtml(text)}</p>`;
+    messageDiv.appendChild(contentDiv);
+    messagesDiv.appendChild(messageDiv);
+    
+    // 스크롤 맨 아래로
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// 빠른 질문 함수
+function quickQuestion(question) {
+    document.getElementById('message-input').value = question;
+    sendMessage();
+}
+
+// 엔터 키 처리
+function handleKeypress(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+// HTML 이스케이프 함수
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 페이지 로드 시 채팅 히스토리 로드
+document.addEventListener('DOMContentLoaded', function() {
+    loadChatHistory();
+    document.getElementById('message-input').focus();
+});
+
+// 채팅 히스토리 로드
+async function loadChatHistory() {
+    try {
+        const res = await fetch('/chat/api/messages');
+        const data = await res.json();
+        
+        if (data.messages && data.messages.length > 0) {
+            const messagesDiv = document.getElementById('chat-messages');
+            messagesDiv.innerHTML = ''; // 초기 메시지 제거
+            
+            data.messages.forEach(msg => {
+                displayMessage(msg.content, msg.sender_type);
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load chat history:', e);
+    }
+}
+</script>
+{% endblock %}
