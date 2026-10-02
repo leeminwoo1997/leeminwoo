@@ -139,8 +139,11 @@
                     <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
                         <i class="bi bi-graph-up"></i> 대시보드
                     </a>
-                    <a href="{{ url_for('admin.products') }}" class="nav-link {% if 'product' in request.endpoint %}active{% endif %}">
+                    <a href="{{ url_for('admin.products') }}" class="nav-link {% if 'product' in request.endpoint and 'inventory' not in request.endpoint %}active{% endif %}">
                         <i class="bi bi-box"></i> 상품 관리
+                    </a>
+                    <a href="{{ url_for('admin.inventory') }}" class="nav-link {% if request.endpoint == 'admin.inventory' %}active{% endif %}">
+                        <i class="bi bi-boxes"></i> 재고 관리
                     </a>
                     <a href="{{ url_for('admin.orders') }}" class="nav-link {% if request.endpoint == 'admin.orders' %}active{% endif %}">
                         <i class="bi bi-bag-check"></i> 주문 관리

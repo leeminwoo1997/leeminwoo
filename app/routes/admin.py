@@ -291,6 +291,160 @@ def product_delete(product_id):
         return jsonify({"success": False, "message": "삭제 실패"}), 500
 
 
+@admin_bp.route("/inventory", methods=["GET"])
+@admin_required
+def inventory():
+    """
+    [재고 관리 페이지]
+    - 전체 상품 옵션별 실시간 재고 현황 조회
+    - 재고 부족/품절 필터링 및 상품명 검색
+    - 옵션별 재고 수량 실시간 수정
+    """
+    supabase = get_admin_supabase_client() or get_supabase_client()
+    
+    status_filter = request.args.get("status", "all")  # all, out_of_stock, low_stock, normal
+    search_query = request.args.get("q", "").strip()
+    
+    inventory_items = []
+    summary_stats = {
+        "total_options": 0,
+        "out_of_stock": 0,
+        "low_stock": 0,
+        "normal_stock": 0,
+        "total_stock_count": 0
+    }
+
+    try:
+        # 옵션 및 상품 기본 정보 JOIN 조회
+        query = supabase.table("product_options").select(
+            "id, product_id, color, size, additional_price, stock, stock_quantity, sku, products(id, name, price, is_active)"
+        )
+        
+        res = query.execute()
+        raw_items = res.data or []
+
+        for item in raw_items:
+            product = item.get("products") or {}
+            product_name = product.get("name") or "이름 없는 상품"
+            
+            # 검색어 필터링
+            if search_query:
+                sku_val = (item.get("sku") or "").lower()
+                color_val = (item.get("color") or "").lower()
+                size_val = (item.get("size") or "").lower()
+                query_lower = search_query.lower()
+                if (query_lower not in product_name.lower() and 
+                    query_lower not in sku_val and 
+                    query_lower not in color_val and 
+                    query_lower not in size_val):
+                    continue
+
+            # 재고 수량 계산 (stock 또는 stock_quantity)
+            stock_val = item.get("stock")
+            if stock_val is None:
+                stock_val = item.get("stock_quantity") or 0
+            stock_val = max(0, int(stock_val))
+
+            # 상태 분류 (0: 품절, 1~5: 재고부족, 6이상: 정상)
+            if stock_val == 0:
+                item_status = "out_of_stock"
+                status_label = "품절"
+                status_badge = "danger"
+                summary_stats["out_of_stock"] += 1
+            elif stock_val <= 5:
+                item_status = "low_stock"
+                status_label = "재고부족"
+                status_badge = "warning"
+                summary_stats["low_stock"] += 1
+            else:
+                item_status = "normal"
+                status_label = "정상"
+                status_badge = "success"
+                summary_stats["normal_stock"] += 1
+
+            summary_stats["total_options"] += 1
+            summary_stats["total_stock_count"] += stock_val
+
+            # 필터 적용
+            if status_filter == "out_of_stock" and item_status != "out_of_stock":
+                continue
+            if status_filter == "low_stock" and item_status != "low_stock":
+                continue
+            if status_filter == "normal" and item_status != "normal":
+                continue
+
+            inventory_items.append({
+                "id": item.get("id"),
+                "product_id": item.get("product_id"),
+                "product_name": product_name,
+                "product_price": f"{int(product.get('price', 0)):,}원",
+                "is_active": product.get("is_active", True),
+                "color": item.get("color") or "-",
+                "size": item.get("size") or "-",
+                "sku": item.get("sku") or "-",
+                "stock": stock_val,
+                "status": item_status,
+                "status_label": status_label,
+                "status_badge": status_badge,
+            })
+
+    except Exception as e:
+        print(f"[에러] 재고 목록 조회 실패: {e}", file=sys.stderr)
+
+    return render_template(
+        "admin/inventory.html",
+        items=inventory_items,
+        summary=summary_stats,
+        status_filter=status_filter,
+        search_query=search_query
+    )
+
+
+@admin_bp.route("/inventory/<option_id>/update", methods=["POST"])
+@admin_required
+def inventory_update(option_id):
+    """
+    [옵션 재고 수량 단건 수정 API]
+    - 입력받은 수량(양수/0)으로 stock 및 stock_quantity 업데이트
+    """
+    try:
+        admin = get_admin_supabase_client() or get_supabase_client()
+        if not admin:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        data = request.get_json(silent=True) or request.form or {}
+        new_stock = data.get("stock")
+
+        if new_stock is None:
+            return jsonify({"success": False, "message": "재고 수량을 입력해주세요."}), 400
+
+        try:
+            new_stock = int(new_stock)
+            if new_stock < 0:
+                return jsonify({"success": False, "message": "재고는 0개 이상이어야 합니다."}), 400
+        except ValueError:
+            return jsonify({"success": False, "message": "올바른 숫자를 입력해주세요."}), 400
+
+        # product_options 테이블 stock, stock_quantity 동시 갱신
+        res = admin.table("product_options").update({
+            "stock": new_stock,
+            "stock_quantity": new_stock
+        }).eq("id", option_id).execute()
+
+        if not res.data:
+            return jsonify({"success": False, "message": "해당 옵션을 찾을 수 없습니다."}), 404
+
+        return jsonify({
+            "success": True,
+            "message": f"재고가 {new_stock}개로 수정되었습니다.",
+            "new_stock": new_stock
+        })
+
+    except Exception as e:
+        print(f"[에러] 재고 수정 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"재고 수정 중 오류 발생: {str(e)}"}), 500
+
+
 @admin_bp.route("/orders")
 @admin_required
 def orders():
