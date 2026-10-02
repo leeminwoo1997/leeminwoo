@@ -31,19 +31,27 @@ def view_cart():
     - carts + product_options + products JOIN으로 모든 필요한 정보 취득
     - 각 아이템: 상품명, 색상, 사이즈, 수량, 단가, 소계, 재고 상태
     """
+    # 쿼리 파라미터 에러 메시지 처리
+    error_param = request.args.get("error")
+    error_msg = None
+    if error_param == "out_of_stock":
+        error_msg = "품절된 상품이 있어 주문할 수 없습니다."
+    elif error_param:
+        error_msg = error_param
+
     user_id = session.get("user_id")
     if not user_id:
         # 로그인하지 않은 사용자는 세션 기반 장바구니 사용
         from app.services.cart_service import get_cart_summary
         summary = get_cart_summary()
-        return render_template("cart.html", cart=summary, is_guest=True)
+        return render_template("cart.html", cart=summary, is_guest=True, error=error_msg)
 
     admin = get_admin_supabase_client() or get_supabase_client()
     if not admin:
         # DB 연결 실패 시 세션 기반으로 폴백
         from app.services.cart_service import get_cart_summary
         summary = get_cart_summary()
-        return render_template("cart.html", cart=summary, is_guest=True)
+        return render_template("cart.html", cart=summary, is_guest=True, error=error_msg)
 
     try:
         # carts + product_options + products JOIN 조회
@@ -64,7 +72,7 @@ def view_cart():
                 "final_price": "0원",
                 "final_price_num": 0,
                 "has_out_of_stock": False
-            }, is_guest=False)
+            }, is_guest=False, error=error_msg)
 
         # 각 cart 항목에서 product_option_id로 product_options, products 정보 조회
         cart_items = []
@@ -155,14 +163,22 @@ def view_cart():
             "has_out_of_stock": has_out_of_stock
         }
 
-        return render_template("cart.html", cart=cart_summary, is_guest=False)
+        # 쿼리 파라미터 에러 메시지 처리
+        error_msg = None
+        error_param = request.args.get("error")
+        if error_param == "out_of_stock" or has_out_of_stock:
+            error_msg = "품절된 상품이 있어 주문할 수 없습니다."
+        elif error_param:
+            error_msg = error_param
+
+        return render_template("cart.html", cart=cart_summary, is_guest=False, error=error_msg)
 
     except Exception as e:
         print(f"[에러] 장바구니 조회 실패: {e}", file=sys.stderr)
         # 에러 시 세션 기반으로 폴백
         from app.services.cart_service import get_cart_summary
         summary = get_cart_summary()
-        return render_template("cart.html", cart=summary, is_guest=True)
+        return render_template("cart.html", cart=summary, is_guest=True, error=error_msg)
 
 @cart_bp.route("/api/summary", methods=["GET"])
 def api_summary():

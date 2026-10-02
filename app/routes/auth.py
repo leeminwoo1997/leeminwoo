@@ -564,6 +564,7 @@ def mypage():
     # GET: 프로필 조회
     profile = {}
     is_email_user = False
+    orders_list = []
 
     if client and user_id:
         try:
@@ -572,6 +573,13 @@ def mypage():
                 profile = res.data[0]
         except Exception as e:
             print(f"[경고] 프로필 조회 실패: {e}", file=sys.stderr)
+
+        # 사용자 주문 내역 조회
+        try:
+            orders_res = client.table("orders").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+            orders_list = orders_res.data or []
+        except Exception as e:
+            print(f"[경고] 사용자 주문 내역 조회 실패: {e}", file=sys.stderr)
 
         # 이메일/비밀번호 가입 여부 확인 (소셜 전용 계정 여부 판별)
         try:
@@ -597,6 +605,7 @@ def mypage():
         user_id=user_id,
         user_email=profile.get("email") or user_email,
         profile=profile,
+        orders=orders_list,
         is_email_user=is_email_user,
         error=error_msg,
         success=success_msg

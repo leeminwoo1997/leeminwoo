@@ -146,8 +146,52 @@
                         {% endif %}
                     </div>
 
-                    <!-- 탭 2: 주문 내역 ("아직 주문 내역이 없습니다" 안내 문구만) -->
+                    <!-- 탭 2: 주문 내역 -->
                     <div class="tab-pane fade" id="orders-tab-pane" role="tabpanel" aria-labelledby="orders-tab" tabindex="0">
+                        {% if orders and orders|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead class="table-light text-secondary small">
+                                    <tr>
+                                        <th>주문번호</th>
+                                        <th>주문일시</th>
+                                        <th>수령인</th>
+                                        <th class="text-end">결제금액</th>
+                                        <th class="text-center">주문상태</th>
+                                        <th class="text-center">상세</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for o in orders %}
+                                    <tr>
+                                        <td class="fw-semibold text-dark font-monospace small">{{ o.order_number }}</td>
+                                        <td class="text-muted small">{{ o.created_at[:10] if o.created_at else '-' }}</td>
+                                        <td class="small">{{ o.recipient_name or '-' }}</td>
+                                        <td class="text-end fw-bold text-dark small">{{ "{:,}원".format(o.final_amount|int) if o.final_amount is defined else '-' }}</td>
+                                        <td class="text-center">
+                                            {% if o.status == 'PAID' %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">결제완료</span>
+                                            {% elif o.status == 'PREPARING' %}
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">배송준비중</span>
+                                            {% elif o.status == 'SHIPPING' %}
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">배송중</span>
+                                            {% elif o.status == 'DELIVERED' %}
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">배송완료</span>
+                                            {% else %}
+                                            <span class="badge bg-light text-dark border">{{ o.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <a href="{{ url_for('order.order_complete', order_number=o.order_number) }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 py-1 small">
+                                                확인
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
                         <div class="text-center py-5">
                             <i class="bi bi-bag-x fs-1 text-muted mb-3 d-block"></i>
                             <p class="text-muted mb-3">아직 주문 내역이 없습니다.</p>
@@ -155,6 +199,7 @@
                                 상품 둘러보기
                             </a>
                         </div>
+                        {% endif %}
                     </div>
 
                     <!-- 탭 3: 환불 내역 ("아직 환불 내역이 없습니다" 안내 문구만) -->

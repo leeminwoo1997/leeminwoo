@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}주문 완료 - Young Style{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 860px;">
+    <!-- 완료 헤더 카드 -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5 text-center mb-4">
+        <div class="mb-3">
+            <span class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px;">
+                <i class="bi bi-check2-circle fs-1"></i>
+            </span>
+        </div>
+        <span class="badge bg-dark text-white px-3 py-2 rounded-pill fw-semibold mx-auto mb-2">ORDER COMPLETED</span>
+        <h3 class="fw-bold text-dark mb-2">주문이 성공적으로 완료되었습니다!</h3>
+        <p class="text-muted mb-4">고객님의 소중한 주문이 정상적으로 접수 및 결제되었습니다.</p>
+
+        <div class="bg-light rounded-4 p-3 p-md-4 d-inline-block text-start w-100" style="max-width: 650px; margin: 0 auto;">
+            <div class="row g-2 small">
+                <div class="col-sm-4 text-secondary">주문 번호</div>
+                <div class="col-sm-8 fw-bold text-dark font-monospace">{{ order.order_number }}</div>
+
+                <div class="col-sm-4 text-secondary">주문 일시</div>
+                <div class="col-sm-8 text-dark">{{ order.created_at[:19].replace('T', ' ') if order.created_at else '-' }}</div>
+
+                <div class="col-sm-4 text-secondary">결제 상태</div>
+                <div class="col-sm-8">
+                    <span class="badge bg-success rounded-pill px-2 py-1">결제 완료 (PAID)</span>
+                </div>
+
+                <div class="col-sm-4 text-secondary">최종 결제 금액</div>
+                <div class="col-sm-8 fw-bold text-danger fs-6">{{ "{:,}원".format(order.final_amount|int) if order.final_amount is defined else '-' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 주문 상세 정보 (배송지 정보 및 주문 상품) -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+        <h5 class="fw-bold text-dark mb-3 pb-2 border-bottom">
+            <i class="bi bi-truck me-2"></i>배송지 정보
+        </h5>
+        <div class="row g-3 small">
+            <div class="col-md-6">
+                <span class="text-secondary d-block">받으시는 분</span>
+                <strong class="text-dark">{{ order.recipient_name }}</strong>
+            </div>
+            <div class="col-md-6">
+                <span class="text-secondary d-block">연락처</span>
+                <span class="text-dark">{{ order.recipient_phone }}</span>
+            </div>
+            <div class="col-12">
+                <span class="text-secondary d-block">배송 주소</span>
+                <span class="text-dark">{{ order.shipping_address }}</span>
+            </div>
+            {% if order.shipping_memo %}
+            <div class="col-12">
+                <span class="text-secondary d-block">배송 요청사항</span>
+                <span class="text-muted">{{ order.shipping_memo }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 주문 상품 품목 목록 -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mb-4">
+        <div class="card-header bg-white border-bottom p-3 p-md-4">
+            <h5 class="fw-bold text-dark mb-0">
+                <i class="bi bi-bag-check me-2"></i>주문 상품 ({{ order_items|length }}개)
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light text-secondary small">
+                        <tr>
+                            <th class="ps-4">상품 정보</th>
+                            <th class="text-center">수량</th>
+                            <th class="text-end pe-4">금액</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order_items %}
+                        <tr>
+                            <td class="ps-4 py-3">
+                                <div class="d-flex align-items-center gap-3">
+                                    <img src="{{ item.thumbnail_url }}" alt="{{ item.product_name }}" 
+                                         class="rounded-3 shadow-sm border" style="width: 54px; height: 60px; object-fit: cover;">
+                                    <div>
+                                        <h6 class="fw-bold mb-1 text-dark">{{ item.product_name }}</h6>
+                                        <small class="text-muted">{{ item.option_name or '-' }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center py-3">
+                                <span class="badge bg-light text-dark border">{{ item.quantity }}개</span>
+                            </td>
+                            <td class="text-end fw-bold text-dark pe-4 py-3">
+                                {{ "{:,}원".format(item.subtotal|int) if item.subtotal is defined else '-' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 하단 이동 버튼 -->
+    <div class="d-flex justify-content-center gap-3 pt-2">
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-dark rounded-pill px-4 py-2 fw-semibold">
+            <i class="bi bi-house me-1"></i> 쇼핑 계속하기
+        </a>
+        <a href="{{ url_for('auth.mypage') }}" class="btn btn-dark rounded-pill px-4 py-2 fw-semibold">
+            <i class="bi bi-person me-1"></i> 주문 내역 확인 (마이페이지)
+        </a>
+    </div>
+</div>
+{% endblock %}

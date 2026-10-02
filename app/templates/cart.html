@@ -18,6 +18,15 @@
         </div>
     </div>
 
+    <!-- 상단 안내 및 에러 메시지 -->
+    {% if error %}
+    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center rounded-3 mb-4 shadow-sm" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+        <div><strong>안내:</strong> {{ error }}</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
     {% if cart.cart_items %}
     <div class="row g-4">
         <!-- 왼쪽: 장바구니 상품 목록 -->
@@ -118,8 +127,11 @@
                     <span class="fw-bold fs-3 text-danger" id="summary-final-price">{{ cart.final_price }}</span>
                 </div>
 
-                <button class="btn btn-dark btn-lg w-100 rounded-pill fw-bold shadow-sm mb-2" 
+                <button id="btn-order-cart" 
+                        class="btn btn-dark btn-lg w-100 rounded-pill fw-bold shadow-sm mb-2" 
                         onclick="orderCart()"
+                        data-url="{{ url_for('order.checkout') }}"
+                        data-out-of-stock="{{ 'true' if cart.has_out_of_stock else 'false' }}"
                         {% if cart.has_out_of_stock %}disabled{% endif %}>
                     <i class="bi bi-credit-card me-1"></i> 바로 주문하기
                 </button>
@@ -287,9 +299,15 @@ async function clearCart() {
     }
 }
 
-// 주문하기 데모 알림
+// 주문서 작성 페이지로 이동
 function orderCart() {
-    alert('총 {{ cart.final_price }} 주문 페이지로 이동합니다 (주문 연동 준비 완료).');
+    const btn = document.getElementById('btn-order-cart');
+    if (btn && btn.dataset.outOfStock === 'true') {
+        alert('품절된 상품이 있어 주문할 수 없습니다. 품절 상품을 삭제한 후 다시 시도해주세요.');
+        return;
+    }
+    const targetUrl = (btn && btn.dataset.url) ? btn.dataset.url : '/order/checkout';
+    location.href = targetUrl;
 }
 </script>
 {% endblock %}
