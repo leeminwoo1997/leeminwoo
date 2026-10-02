@@ -182,7 +182,7 @@
                                             {% endif %}
                                         </td>
                                         <td class="text-center">
-                                            <a href="{{ url_for('order.order_complete', order_number=o.order_number) }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 py-1 small">
+                                            <a href="{{ url_for('order.order_complete', order_id=o.id) }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 py-1 small">
                                                 확인
                                             </a>
                                         </td>

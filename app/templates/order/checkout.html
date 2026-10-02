@@ -53,7 +53,7 @@
     </div>
     {% endif %}
 
-    <form id="checkout-form" method="POST" action="{{ url_for('order.checkout') }}" class="needs-validation" novalidate>
+    <form id="checkout-form" method="POST" action="{{ url_for('order.create_order_route') }}" class="needs-validation" novalidate>
         <div class="row g-4">
             <!-- 왼쪽 컬럼: 배송지 정보 + 주문 상품 목록(수정 불가) + 결제 수단 -->
             <div class="col-lg-8">
