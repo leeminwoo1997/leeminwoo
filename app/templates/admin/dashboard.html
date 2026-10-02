@@ -62,13 +62,13 @@
                     {% for order in recent_orders %}
                     <tr>
                         <td>
-                            <a href="#" class="text-decoration-none fw-bold">#{{ order.id }}</a>
+                            <a href="{{ url_for('admin.orders') }}" class="text-decoration-none fw-bold font-monospace small">#{{ order.id }}</a>
                         </td>
                         <td>{{ order.user_name }}</td>
                         <td class="fw-bold">{{ order.total_price }}</td>
                         <td>
-                            <span class="status-badge {% if order.status == 'pending' %}status-pending{% elif order.status == 'completed' %}status-completed{% endif %}">
-                                {{ order.status }}
+                            <span class="status-badge {% if order.status in ['PAID', 'paid', 'completed'] %}status-completed{% elif order.status in ['pending', 'PENDING_PAYMENT'] %}status-pending{% else %}status-pending{% endif %}">
+                                {% if order.status in ['PAID', 'paid'] %}결제완료{% elif order.status == 'PREPARING' %}배송준비{% elif order.status == 'SHIPPING' %}배송중{% elif order.status == 'DELIVERED' %}배송완료{% else %}{{ order.status }}{% endif %}
                             </span>
                         </td>
                         <td><small class="text-muted">{{ order.created_at[:10] }}</small></td>

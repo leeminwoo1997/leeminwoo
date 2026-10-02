@@ -53,14 +53,14 @@
                     {% for order in orders %}
                     <tr>
                         <td>
-                            <span class="fw-bold">#{{ order.id }}</span>
+                            <span class="fw-bold font-monospace small">#{{ order.id }}</span>
                         </td>
                         <td>{{ order.user_name }}</td>
                         <td><small>{{ order.phone }}</small></td>
                         <td class="fw-bold text-success">{{ order.total_price }}</td>
                         <td>
-                            <span class="status-badge {% if order.status == 'pending' %}status-pending{% elif order.status == 'completed' %}status-completed{% else %}status-pending{% endif %}">
-                                {{ order.status }}
+                            <span class="status-badge {% if order.status in ['PAID', 'paid', 'completed'] %}status-completed{% elif order.status in ['pending', 'PENDING_PAYMENT'] %}status-pending{% else %}status-pending{% endif %}">
+                                {% if order.status in ['PAID', 'paid'] %}결제완료{% elif order.status == 'PREPARING' %}배송준비{% elif order.status == 'SHIPPING' %}배송중{% elif order.status == 'DELIVERED' %}배송완료{% else %}{{ order.status }}{% endif %}
                             </span>
                         </td>
                         <td><small class="text-muted">{{ order.created_at }}</small></td>

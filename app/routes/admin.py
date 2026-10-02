@@ -14,6 +14,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 @admin_bp.route("/")
+@admin_bp.route("/dashboard")
 @admin_required
 def dashboard():
     """
@@ -21,7 +22,7 @@ def dashboard():
     - 주요 통계: 매출, 주문, 사용자
     - 최근 주문, 인기 상품
     """
-    supabase = get_supabase_client()
+    supabase = get_admin_supabase_client() or get_supabase_client()
     
     # 기본 통계
     stats = {
@@ -43,33 +44,45 @@ def dashboard():
         users_res = supabase.table("profiles").select("id").execute()
         stats["total_users"] = len(users_res.data) if users_res.data else 0
         
-        # 전체 매출 및 오늘 매출
-        orders_detail_res = supabase.table("orders").select("total_price, created_at").execute()
+        # 전체 매출 및 오늘 매출 (final_amount 사용, 폴백으로 total_amount / total_price 지원)
+        orders_detail_res = supabase.table("orders").select("id, final_amount, total_amount, created_at").execute()
         if orders_detail_res.data:
-            stats["total_revenue"] = sum(int(o.get("total_price", 0)) for o in orders_detail_res.data)
+            stats["total_revenue"] = sum(
+                int(o.get("final_amount") or o.get("total_amount") or o.get("total_price") or 0)
+                for o in orders_detail_res.data
+            )
             
             # 오늘 매출 계산
             today = datetime.utcnow().date()
             today_orders = [
                 o for o in orders_detail_res.data
-                if datetime.fromisoformat(o.get("created_at", "").replace("Z", "+00:00")).date() == today
+                if o.get("created_at") and datetime.fromisoformat(o.get("created_at", "").replace("Z", "+00:00")).date() == today
             ]
-            stats["today_revenue"] = sum(int(o.get("total_price", 0)) for o in today_orders)
+            stats["today_revenue"] = sum(
+                int(o.get("final_amount") or o.get("total_amount") or o.get("total_price") or 0)
+                for o in today_orders
+            )
         
         # 최근 주문 5개
         recent_orders_res = supabase.table("orders").select(
-            "id, user_id, total_price, status, created_at, profiles(full_name)"
+            "id, order_number, user_id, final_amount, total_amount, status, created_at, profiles(full_name)"
         ).order("created_at", desc=True).limit(5).execute()
         
         recent_orders = []
         if recent_orders_res.data:
             for order in recent_orders_res.data:
                 profile = order.get("profiles", {})
+                user_name = profile.get("full_name") if isinstance(profile, dict) else None
+                if not user_name:
+                    user_name = order.get("recipient_name") or "고객"
+                amount = int(order.get("final_amount") or order.get("total_amount") or order.get("total_price") or 0)
+                display_num = order.get("order_number") or order.get("id")[:8]
                 recent_orders.append({
-                    "id": order.get("id")[:8],
-                    "user_name": profile.get("full_name", "확인안됨") if isinstance(profile, dict) else "확인안됨",
-                    "total_price": f"{int(order.get('total_price', 0)):,}원",
-                    "status": order.get("status", "pending"),
+                    "id": display_num,
+                    "order_id": order.get("id"),
+                    "user_name": user_name,
+                    "total_price": f"{amount:,}원",
+                    "status": order.get("status", "PAID"),
                     "created_at": order.get("created_at", "")
                 })
         
@@ -286,7 +299,7 @@ def orders():
     - 전체 주문 목록 조회
     - 배송 상태 업데이트
     """
-    supabase = get_supabase_client()
+    supabase = get_admin_supabase_client() or get_supabase_client()
     
     page = request.args.get("page", 1, type=int)
     per_page = 20
@@ -300,20 +313,32 @@ def orders():
         count_res = supabase.table("orders").select("id").execute()
         total_count = len(count_res.data) if count_res.data else 0
         
-        # 주문 목록
+        # 주문 목록 (final_amount, recipient_name, recipient_phone 등 orders 테이블 컬럼 활용)
         orders_res = supabase.table("orders").select(
-            "id, user_id, total_price, status, created_at, profiles(full_name, phone_number)"
+            "id, order_number, user_id, final_amount, total_amount, status, recipient_name, recipient_phone, shipping_address, created_at, profiles(full_name, phone_number)"
         ).order("created_at", desc=True).range(offset, offset + per_page - 1).execute()
         
         if orders_res.data:
             for order in orders_res.data:
                 profile = order.get("profiles", {})
+                user_name = profile.get("full_name") if isinstance(profile, dict) else None
+                if not user_name:
+                    user_name = order.get("recipient_name") or "-"
+                
+                phone = profile.get("phone_number") if isinstance(profile, dict) else None
+                if not phone:
+                    phone = order.get("recipient_phone") or "-"
+
+                amount = int(order.get("final_amount") or order.get("total_amount") or order.get("total_price") or 0)
+                display_num = order.get("order_number") or order.get("id")[:8]
+
                 orders_list.append({
-                    "id": order.get("id")[:8],
-                    "user_name": profile.get("full_name", "-") if isinstance(profile, dict) else "-",
-                    "phone": profile.get("phone_number", "-") if isinstance(profile, dict) else "-",
-                    "total_price": f"{int(order.get('total_price', 0)):,}원",
-                    "status": order.get("status", "pending"),
+                    "id": display_num,
+                    "order_id": order.get("id"),
+                    "user_name": user_name,
+                    "phone": phone,
+                    "total_price": f"{amount:,}원",
+                    "status": order.get("status", "PAID"),
                     "created_at": order.get("created_at", "")[:10]
                 })
     
@@ -444,7 +469,7 @@ def reports():
     [매출 리포트 페이지]
     - 일일/월별 매출 통계
     """
-    supabase = get_supabase_client()
+    supabase = get_admin_supabase_client() or get_supabase_client()
     
     # 기간 선택
     report_type = request.args.get("type", "daily")  # daily, monthly
@@ -452,7 +477,7 @@ def reports():
     sales_data = []
     
     try:
-        orders_res = supabase.table("orders").select("total_price, created_at").execute()
+        orders_res = supabase.table("orders").select("id, final_amount, total_amount, created_at").execute()
         
         if orders_res.data:
             if report_type == "daily":
@@ -460,7 +485,7 @@ def reports():
                 sales_by_date = {}
                 for order in orders_res.data:
                     date = order.get("created_at", "")[:10]
-                    price = int(order.get("total_price", 0))
+                    price = int(order.get("final_amount") or order.get("total_amount") or order.get("total_price") or 0)
                     sales_by_date[date] = sales_by_date.get(date, 0) + price
                 
                 # 최근 30일 데이터만
@@ -478,7 +503,7 @@ def reports():
                 sales_by_month = {}
                 for order in orders_res.data:
                     month = order.get("created_at", "")[:7]
-                    price = int(order.get("total_price", 0))
+                    price = int(order.get("final_amount") or order.get("total_amount") or order.get("total_price") or 0)
                     sales_by_month[month] = sales_by_month.get(month, 0) + price
                 
                 for month in sorted(sales_by_month.keys()):
