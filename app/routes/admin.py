@@ -639,6 +639,388 @@ def order_status_update(order_id):
         return jsonify({"success": False, "message": f"상태 업데이트 중 오류가 발생했습니다: {str(e)}"}), 500
 
 
+def _restore_order_stock(supabase, order_id):
+    """주문 상품의 수량을 product_options 재고로 다시 복구 가산"""
+    try:
+        items_res = supabase.table("order_items").select("product_option_id, quantity").eq("order_id", order_id).execute()
+        items = items_res.data or []
+        for item in items:
+            opt_id = item.get("product_option_id")
+            qty = int(item.get("quantity") or 0)
+            if not opt_id or qty <= 0:
+                continue
+
+            opt_res = supabase.table("product_options").select("stock, stock_quantity").eq("id", opt_id).execute()
+            if opt_res.data:
+                cur_stock = opt_res.data[0].get("stock")
+                if cur_stock is None:
+                    cur_stock = opt_res.data[0].get("stock_quantity") or 0
+                new_stock = int(cur_stock) + qty
+                supabase.table("product_options").update({
+                    "stock": new_stock,
+                    "stock_quantity": new_stock
+                }).eq("id", opt_id).execute()
+    except Exception as e:
+        print(f"[경고] 주문 재고 복구 중 오류: {e}", file=sys.stderr)
+
+
+@admin_bp.route("/refunds", methods=["GET"])
+@admin_required
+def refunds():
+    """
+    [주문 취소 및 환불/반품 관리 페이지]
+    - 환불/반품 요청 목록 및 처리 현황 조회
+    - 상태 필터링 (REQUESTED, APPROVED, COMPLETED, REJECTED)
+    - 주문번호/고객명/사유 검색
+    """
+    supabase = get_admin_supabase_client() or get_supabase_client()
+
+    status_filter = request.args.get("status", "all").strip()
+    search_query = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    refunds_list = []
+    summary_stats = {
+        "total_count": 0,
+        "requested": 0,
+        "approved": 0,
+        "completed": 0,
+        "rejected": 0,
+        "total_refund_amount": 0
+    }
+
+    recent_orders = []
+
+    try:
+        # 1. 전체 환불 목록 조회
+        refunds_res = supabase.table("refunds").select(
+            "id, order_id, user_id, reason, refund_amount, status, admin_memo, processed_at, created_at, "
+            "orders(id, order_number, final_amount, status, recipient_name, recipient_phone), "
+            "profiles(id, full_name, email, phone_number)"
+        ).order("created_at", desc=True).execute()
+
+        all_refunds = refunds_res.data or []
+
+        # 2. 통계 요약 계산
+        for r in all_refunds:
+            summary_stats["total_count"] += 1
+            st = (r.get("status") or "").upper()
+            amt = int(r.get("refund_amount") or 0)
+
+            if st == "REQUESTED":
+                summary_stats["requested"] += 1
+            elif st == "APPROVED":
+                summary_stats["approved"] += 1
+                summary_stats["total_refund_amount"] += amt
+            elif st == "COMPLETED":
+                summary_stats["completed"] += 1
+                summary_stats["total_refund_amount"] += amt
+            elif st == "REJECTED":
+                summary_stats["rejected"] += 1
+
+        # 3. 필터링 및 검색 적용
+        filtered_refunds = []
+        for r in all_refunds:
+            st = (r.get("status") or "").upper()
+            if status_filter != "all" and st != status_filter:
+                continue
+
+            if search_query:
+                q_lower = search_query.lower()
+                order = r.get("orders") or {}
+                profile = r.get("profiles") or {}
+                ord_num = (order.get("order_number") or "").lower()
+                rec_name = (order.get("recipient_name") or "").lower()
+                user_name = (profile.get("full_name") or "").lower()
+                user_email = (profile.get("email") or "").lower()
+                reason = (r.get("reason") or "").lower()
+
+                if (q_lower not in ord_num and
+                    q_lower not in rec_name and
+                    q_lower not in user_name and
+                    q_lower not in user_email and
+                    q_lower not in reason):
+                    continue
+
+            filtered_refunds.append(r)
+
+        total_count = len(filtered_refunds)
+        paged_refunds = filtered_refunds[offset : offset + per_page]
+
+        status_kor_map = {
+            "REQUESTED": ("요청대기", "warning"),
+            "APPROVED": ("환불승인", "primary"),
+            "COMPLETED": ("환불완료", "success"),
+            "REJECTED": ("요청거절", "danger")
+        }
+
+        for r in paged_refunds:
+            st = (r.get("status") or "REQUESTED").upper()
+            label, badge_class = status_kor_map.get(st, (st, "secondary"))
+            order = r.get("orders") or {}
+            profile = r.get("profiles") or {}
+
+            customer_name = profile.get("full_name") or order.get("recipient_name") or "-"
+            customer_phone = profile.get("phone_number") or order.get("recipient_phone") or "-"
+
+            refunds_list.append({
+                "id": r.get("id"),
+                "order_id": r.get("order_id"),
+                "order_number": order.get("order_number") or (str(r.get("order_id"))[:8] if r.get("order_id") else "-"),
+                "order_status": order.get("status", "-"),
+                "user_id": r.get("user_id"),
+                "customer_name": customer_name,
+                "customer_email": profile.get("email") or "-",
+                "customer_phone": customer_phone,
+                "reason": r.get("reason") or "-",
+                "refund_amount": int(r.get("refund_amount") or 0),
+                "refund_amount_formatted": f"{int(r.get('refund_amount') or 0):,}원",
+                "status": st,
+                "status_label": label,
+                "status_badge": badge_class,
+                "admin_memo": r.get("admin_memo") or "",
+                "created_at": (r.get("created_at") or "")[:19].replace("T", " "),
+                "processed_at": (r.get("processed_at") or "")[:19].replace("T", " ") if r.get("processed_at") else "-"
+            })
+
+        # 4. 신규 환불 등록 시 선택할 수 있는 최근 주문 20개 조회
+        orders_res = supabase.table("orders").select(
+            "id, order_number, final_amount, status, recipient_name, created_at"
+        ).order("created_at", desc=True).limit(20).execute()
+        recent_orders = orders_res.data or []
+
+    except Exception as e:
+        print(f"[에러] 환불 목록 조회 실패: {e}", file=sys.stderr)
+        total_count = 0
+
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+
+    return render_template(
+        "admin/refunds.html",
+        refunds=refunds_list,
+        summary=summary_stats,
+        recent_orders=recent_orders,
+        status_filter=status_filter,
+        search_query=search_query,
+        page=page,
+        total_pages=total_pages,
+        total_count=total_count
+    )
+
+
+@admin_bp.route("/refunds/<refund_id>", methods=["GET"])
+@admin_required
+def refund_detail_api(refund_id):
+    """
+    [환불 상세 조회 API]
+    """
+    try:
+        supabase = get_admin_supabase_client() or get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        res = supabase.table("refunds").select(
+            "id, order_id, user_id, reason, refund_amount, status, admin_memo, processed_at, created_at, "
+            "orders(id, order_number, final_amount, status, recipient_name, recipient_phone, shipping_address), "
+            "profiles(full_name, email, phone_number)"
+        ).eq("id", refund_id).execute()
+
+        if not res.data:
+            return jsonify({"success": False, "message": "해당 환불 내역을 찾을 수 없습니다."}), 404
+
+        r = res.data[0]
+        order = r.get("orders") or {}
+        profile = r.get("profiles") or {}
+
+        # 주문 상품 조회
+        items = []
+        if r.get("order_id"):
+            items_res = supabase.table("order_items").select(
+                "product_name, option_name, quantity, unit_price, subtotal"
+            ).eq("order_id", r.get("order_id")).execute()
+            items = items_res.data or []
+
+        return jsonify({
+            "success": True,
+            "refund": {
+                "id": r["id"],
+                "order_id": r.get("order_id"),
+                "order_number": order.get("order_number") or "-",
+                "order_status": order.get("status", "-"),
+                "recipient_name": order.get("recipient_name") or "-",
+                "recipient_phone": order.get("recipient_phone") or "-",
+                "shipping_address": order.get("shipping_address") or "-",
+                "customer_name": profile.get("full_name") or order.get("recipient_name") or "-",
+                "customer_email": profile.get("email") or "-",
+                "reason": r.get("reason") or "-",
+                "refund_amount": int(r.get("refund_amount") or 0),
+                "status": r.get("status", "REQUESTED"),
+                "admin_memo": r.get("admin_memo") or "",
+                "created_at": (r.get("created_at") or "")[:19].replace("T", " "),
+                "processed_at": (r.get("processed_at") or "")[:19].replace("T", " ") if r.get("processed_at") else "-",
+                "items": items
+            }
+        })
+
+    except Exception as e:
+        print(f"[에러] 환불 상세 조회 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"조회 중 오류 발생: {str(e)}"}), 500
+
+
+@admin_bp.route("/refunds/<refund_id>/process", methods=["POST"])
+@admin_required
+def refund_process(refund_id):
+    """
+    [환불 상태 및 관리자 메모 처리 API]
+    - 상태 변경: REQUESTED, APPROVED, COMPLETED, REJECTED
+    - restore_stock 옵션 선택 시 주문 상품 재고 가산 복구
+    - COMPLETED / APPROVED 처리 시 orders 상태 동기화
+    """
+    try:
+        supabase = get_admin_supabase_client() or get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        data = request.get_json(silent=True) or request.form or {}
+        new_status = data.get("status")
+        admin_memo = data.get("admin_memo", "").strip()
+        restore_stock = bool(data.get("restore_stock"))
+
+        valid_statuses = ["REQUESTED", "APPROVED", "COMPLETED", "REJECTED"]
+        if not new_status or new_status not in valid_statuses:
+            return jsonify({"success": False, "message": "유효하지 않은 환불 상태입니다."}), 400
+
+        # 기존 환불 레코드 조회
+        cur_res = supabase.table("refunds").select("id, order_id, status").eq("id", refund_id).execute()
+        if not cur_res.data:
+            return jsonify({"success": False, "message": "해당 환불 요청을 찾을 수 없습니다."}), 404
+
+        order_id = cur_res.data[0].get("order_id")
+
+        now_iso = datetime.utcnow().isoformat()
+        update_payload = {
+            "status": new_status,
+            "admin_memo": admin_memo if admin_memo else None,
+            "processed_at": now_iso,
+            "updated_at": now_iso
+        }
+
+        res = supabase.table("refunds").update(update_payload).eq("id", refund_id).execute()
+        if not res.data:
+            return jsonify({"success": False, "message": "환불 상태 갱신에 실패했습니다."}), 500
+
+        # 재고 복구 처리 (옵션 체크된 경우)
+        if restore_stock and order_id and new_status in ["APPROVED", "COMPLETED"]:
+            _restore_order_stock(supabase, order_id)
+
+        # 연관 주문 상태 동기화
+        if order_id:
+            if new_status == "COMPLETED":
+                supabase.table("orders").update({"status": "REFUNDED", "updated_at": now_iso}).eq("id", order_id).execute()
+            elif new_status == "APPROVED":
+                supabase.table("orders").update({"status": "CANCELLED", "updated_at": now_iso}).eq("id", order_id).execute()
+
+        status_kor_map = {
+            "REQUESTED": "요청대기",
+            "APPROVED": "환불승인",
+            "COMPLETED": "환불완료",
+            "REJECTED": "요청거절"
+        }
+
+        return jsonify({
+            "success": True,
+            "message": f"환불 상태가 '{status_kor_map.get(new_status, new_status)}'(으)로 처리되었습니다."
+        })
+
+    except Exception as e:
+        print(f"[에러] 환불 처리 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"환불 처리 중 오류 발생: {str(e)}"}), 500
+
+
+@admin_bp.route("/refunds/create", methods=["POST"])
+@admin_required
+def refund_create():
+    """
+    [관리자 직권 주문 취소/환불 등록 API]
+    """
+    try:
+        supabase = get_admin_supabase_client() or get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        data = request.get_json(silent=True) or request.form or {}
+        order_id = data.get("order_id")
+        reason = data.get("reason", "").strip()
+        refund_amount = data.get("refund_amount")
+        status = data.get("status", "APPROVED").strip().upper()
+        admin_memo = data.get("admin_memo", "").strip()
+        restore_stock = bool(data.get("restore_stock", True))
+
+        if not order_id:
+            return jsonify({"success": False, "message": "주문을 선택해주세요."}), 400
+
+        if not reason:
+            return jsonify({"success": False, "message": "취소/환불 사유를 입력해주세요."}), 400
+
+        # 주문 정보 확인
+        order_res = supabase.table("orders").select("id, user_id, final_amount, status").eq("id", order_id).execute()
+        if not order_res.data:
+            return jsonify({"success": False, "message": "해당 주문을 찾을 수 없습니다."}), 404
+
+        order = order_res.data[0]
+        user_id = order.get("user_id")
+
+        if refund_amount is None or str(refund_amount).strip() == "":
+            refund_amount = int(order.get("final_amount") or 0)
+        else:
+            refund_amount = int(refund_amount)
+
+        if refund_amount < 0:
+            return jsonify({"success": False, "message": "환불 금액은 0원 이상이어야 합니다."}), 400
+
+        valid_statuses = ["REQUESTED", "APPROVED", "COMPLETED", "REJECTED"]
+        if status not in valid_statuses:
+            status = "APPROVED"
+
+        now_iso = datetime.utcnow().isoformat()
+        insert_payload = {
+            "order_id": order_id,
+            "user_id": user_id,
+            "reason": reason,
+            "refund_amount": refund_amount,
+            "status": status,
+            "admin_memo": admin_memo if admin_memo else "관리자 직권 등록",
+            "processed_at": now_iso,
+            "created_at": now_iso,
+            "updated_at": now_iso
+        }
+
+        res = supabase.table("refunds").insert(insert_payload).execute()
+        if not res.data:
+            return jsonify({"success": False, "message": "환불 등록에 실패했습니다."}), 500
+
+        # 재고 복구 처리
+        if restore_stock and status in ["APPROVED", "COMPLETED"]:
+            _restore_order_stock(supabase, order_id)
+
+        # 주문 상태 동기화
+        if status == "COMPLETED":
+            supabase.table("orders").update({"status": "REFUNDED", "updated_at": now_iso}).eq("id", order_id).execute()
+        elif status == "APPROVED":
+            supabase.table("orders").update({"status": "CANCELLED", "updated_at": now_iso}).eq("id", order_id).execute()
+
+        return jsonify({
+            "success": True,
+            "message": "주문 취소 및 환불 처리가 등록되었습니다."
+        })
+
+    except Exception as e:
+        print(f"[에러] 환불 등록 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"환불 등록 중 오류 발생: {str(e)}"}), 500
+
+
 @admin_bp.route("/users")
 @admin_required
 def users():

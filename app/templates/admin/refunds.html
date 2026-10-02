@@ -1,0 +1,593 @@
+{% extends "admin/base.html" %}
+
+{% block title %}주문 취소 및 환불/반품 관리 - 백오피스{% endblock %}
+
+{% block admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">
+            <i class="bi bi-arrow-counterclockwise me-2"></i>취소 및 환불/반품 관리
+        </h2>
+        <p class="text-muted small mb-0">고객의 주문 취소 및 환불/반품 요청을 심사하고 승인, 완료(재고 복원), 거절 처리를 진행합니다.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#createRefundModal">
+            <i class="bi bi-plus-lg me-1"></i>직권 취소/환불 등록
+        </button>
+        <a href="{{ url_for('admin.refunds') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+            <i class="bi bi-arrow-clockwise me-1"></i>새로고침
+        </a>
+    </div>
+</div>
+
+<!-- 상단 요약 카드 -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card" style="border-left-color: #2c3e50;">
+            <div class="stat-label">전체 요청 건수</div>
+            <div class="stat-value text-dark">{{ summary.total_count }}<span class="fs-6 fw-normal text-muted ms-1">건</span></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card" style="border-left-color: #ffc107;">
+            <div class="stat-label text-warning-emphasis fw-bold">요청 대기</div>
+            <div class="stat-value text-warning-emphasis">{{ summary.requested }}<span class="fs-6 fw-normal text-muted ms-1">건</span></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card" style="border-left-color: #198754;">
+            <div class="stat-label text-success fw-bold">환불/취소 완료</div>
+            <div class="stat-value text-success">{{ summary.completed }}<span class="fs-6 fw-normal text-muted ms-1">건</span></div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card" style="border-left-color: #dc3545;">
+            <div class="stat-label text-danger fw-bold">누적 환불 확정액</div>
+            <div class="stat-value text-danger">{{ "{:,}".format(summary.total_refund_amount) }}<span class="fs-6 fw-normal text-muted ms-1">원</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- 필터 및 검색 바 -->
+<div class="admin-card mb-4">
+    <div class="row g-3 align-items-center">
+        <!-- 필터 탭 -->
+        <div class="col-md-7">
+            <div class="btn-group" role="group">
+                <a href="{{ url_for('admin.refunds', status='all', q=search_query) }}" 
+                   class="btn btn-sm {% if status_filter == 'all' %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+                    전체 ({{ summary.total_count }})
+                </a>
+                <a href="{{ url_for('admin.refunds', status='REQUESTED', q=search_query) }}" 
+                   class="btn btn-sm {% if status_filter == 'REQUESTED' %}btn-warning text-dark{% else %}btn-outline-warning text-dark{% endif %}">
+                    <i class="bi bi-clock me-1"></i>요청대기 ({{ summary.requested }})
+                </a>
+                <a href="{{ url_for('admin.refunds', status='APPROVED', q=search_query) }}" 
+                   class="btn btn-sm {% if status_filter == 'APPROVED' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-check-circle me-1"></i>승인됨 ({{ summary.approved }})
+                </a>
+                <a href="{{ url_for('admin.refunds', status='COMPLETED', q=search_query) }}" 
+                   class="btn btn-sm {% if status_filter == 'COMPLETED' %}btn-success{% else %}btn-outline-success{% endif %}">
+                    <i class="bi bi-check2-all me-1"></i>완료 ({{ summary.completed }})
+                </a>
+                <a href="{{ url_for('admin.refunds', status='REJECTED', q=search_query) }}" 
+                   class="btn btn-sm {% if status_filter == 'REJECTED' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                    <i class="bi bi-x-circle me-1"></i>거절 ({{ summary.rejected }})
+                </a>
+            </div>
+        </div>
+
+        <!-- 검색창 -->
+        <div class="col-md-5">
+            <form method="GET" action="{{ url_for('admin.refunds') }}" class="d-flex gap-2">
+                <input type="hidden" name="status" value="{{ status_filter }}">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control" name="q" value="{{ search_query }}" 
+                           placeholder="주문번호, 고객명, 사유 검색...">
+                    <button class="btn btn-outline-secondary" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                {% if search_query %}
+                <a href="{{ url_for('admin.refunds', status=status_filter) }}" class="btn btn-sm btn-outline-danger" title="초기화">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 환불/취소 내역 테이블 -->
+<div class="admin-card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 18%;">주문번호</th>
+                    <th style="width: 14%;">고객명</th>
+                    <th style="width: 20%;">취소/환불 사유</th>
+                    <th style="width: 12%;" class="text-end">환불금액</th>
+                    <th style="width: 12%;" class="text-center">상태</th>
+                    <th style="width: 12%;">접수일시</th>
+                    <th style="width: 12%;" class="text-center">관리</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if refunds %}
+                    {% for r in refunds %}
+                    <tr id="refund-row-{{ r.id }}">
+                        <td>
+                            <strong class="font-monospace small text-dark d-block">#{{ r.order_number }}</strong>
+                            <small class="text-muted">주문상태: {{ r.order_status }}</small>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark">{{ r.customer_name }}</div>
+                            <small class="text-muted">{{ r.customer_phone }}</small>
+                        </td>
+                        <td>
+                            <div class="small text-truncate" style="max-width: 220px;" title="{{ r.reason }}">
+                                {{ r.reason }}
+                            </div>
+                            {% if r.admin_memo %}
+                            <small class="text-secondary d-block"><i class="bi bi-chat-left-text me-1"></i>{{ r.admin_memo }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold text-danger">
+                            {{ r.refund_amount_formatted }}
+                        </td>
+                        <td class="text-center">
+                            <span id="badge-{{ r.id }}" class="badge bg-{{ r.status_badge }}-subtle text-{{ r.status_badge }} border border-{{ r.status_badge }}-subtle">
+                                {{ r.status_label }}
+                            </span>
+                        </td>
+                        <td>
+                            <small class="text-muted d-block">{{ r.created_at[:10] }}</small>
+                            <small class="text-secondary">{{ r.created_at[11:16] }}</small>
+                        </td>
+                        <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" onclick="openRefundDetail('{{ r.id }}')">
+                                <i class="bi bi-gear me-1"></i>처리/상세
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                            등록된 취소 및 환불/반품 내역이 없습니다.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 페이지네이션 -->
+{% if total_pages > 1 %}
+<nav aria-label="페이지 네비게이션" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.refunds', page=1, status=status_filter, q=search_query) }}">처음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.refunds', page=page-1, status=status_filter, q=search_query) }}">이전</a>
+            </li>
+        {% endif %}
+
+        {% for p in range(max(1, page-2), min(total_pages+1, page+3)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('admin.refunds', page=p, status=status_filter, q=search_query) }}">{{ p }}</a>
+            </li>
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.refunds', page=page+1, status=status_filter, q=search_query) }}">다음</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.refunds', page=total_pages, status=status_filter, q=search_query) }}">마지막</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+<!-- 1. 환불 상세 및 심사 처리 모달 -->
+<div class="modal fade" id="refundDetailModal" tabindex="-1" aria-labelledby="refundDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom bg-light py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="modal-title fw-bold text-dark mb-0" id="refundDetailModalLabel">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>취소/환불 심사 및 처리
+                    </h5>
+                    <span id="modal-refund-order-number" class="badge bg-dark font-monospace">#ORD-</span>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            
+            <div class="modal-body p-4">
+                <div id="refund-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="text-muted small mt-2">환불 내역을 조회 중입니다...</p>
+                </div>
+
+                <div id="refund-content" class="d-none">
+                    <!-- 상단 처리 컨트롤 카드 -->
+                    <div class="card border border-warning-subtle bg-warning-subtle bg-opacity-10 rounded-3 p-3 mb-4">
+                        <h6 class="fw-bold text-dark mb-3">
+                            <i class="bi bi-shield-check me-1"></i>환불 상태 변경 및 심사 처리
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label for="process-status" class="form-label small fw-semibold text-secondary mb-1">처리 상태</label>
+                                <select id="process-status" class="form-select form-select-sm">
+                                    <option value="REQUESTED">요청대기 (REQUESTED)</option>
+                                    <option value="APPROVED">환불승인 (APPROVED - 주문취소 연동)</option>
+                                    <option value="COMPLETED">환불완료 (COMPLETED - 환불완료 연동)</option>
+                                    <option value="REJECTED">요청거절 (REJECTED)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-7">
+                                <label for="process-memo" class="form-label small fw-semibold text-secondary mb-1">관리자 처리 메모 / 거절 사유</label>
+                                <input type="text" id="process-memo" class="form-control form-control-sm" placeholder="고객에게 안내할 메모 또는 거절 사유">
+                            </div>
+                            <div class="col-12 d-flex justify-content-between align-items-center pt-1 border-top mt-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="process-restore-stock" checked>
+                                    <label class="form-check-label small text-dark fw-semibold" for="process-restore-stock">
+                                        <i class="bi bi-boxes me-1"></i>승인/완료 시 주문 상품 재고 자동 복구 가산
+                                    </label>
+                                </div>
+                                <button type="button" id="btn-save-process" class="btn btn-primary btn-sm px-4 fw-semibold" onclick="saveRefundProcess()">
+                                    <span id="save-process-text">처리 저장</span>
+                                    <span id="save-process-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 환불 및 주문 정보 카드 -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <div class="card border rounded-3 p-3 h-100">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-2">
+                                    <i class="bi bi-info-circle me-1"></i>요청 내역
+                                </h6>
+                                <div class="small">
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">환불 요청액:</span>
+                                        <strong id="modal-refund-amount" class="text-danger fs-6">0원</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">접수 일시:</span>
+                                        <span id="modal-refund-created" class="text-muted">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">처리 일시:</span>
+                                        <span id="modal-refund-processed" class="text-muted">-</span>
+                                    </div>
+                                    <div class="py-1">
+                                        <span class="text-secondary d-block">환불 사유:</span>
+                                        <div id="modal-refund-reason" class="p-2 bg-light rounded text-dark mt-1">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border rounded-3 p-3 h-100">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-2">
+                                    <i class="bi bi-person me-1"></i>주문 및 고객 정보
+                                </h6>
+                                <div class="small">
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">주문 고객:</span>
+                                        <strong id="modal-customer-name" class="text-dark">-</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">이메일:</span>
+                                        <span id="modal-customer-email" class="text-dark">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">수령인/연락처:</span>
+                                        <span id="modal-recipient-info" class="text-dark">-</span>
+                                    </div>
+                                    <div class="py-1">
+                                        <span class="text-secondary d-block">배송 주소:</span>
+                                        <span id="modal-shipping-address" class="text-dark d-block mt-1">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 주문 상품 목록 -->
+                    <div class="card border rounded-3 overflow-hidden">
+                        <div class="card-header bg-light py-2 px-3">
+                            <h6 class="fw-bold text-dark mb-0 small">
+                                <i class="bi bi-bag me-1"></i>해당 주문 상품 품목
+                            </h6>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light small text-secondary">
+                                    <tr>
+                                        <th class="ps-3">상품명</th>
+                                        <th>옵션</th>
+                                        <th class="text-center">수량</th>
+                                        <th class="text-end pe-3">소계</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modal-order-items-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-top bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 직권 취소/환불 등록 모달 -->
+<div class="modal fade" id="createRefundModal" tabindex="-1" aria-labelledby="createRefundModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark" id="createRefundModalLabel">
+                    <i class="bi bi-plus-circle me-1"></i>직권 취소/환불 등록
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="create-refund-form">
+                    <div class="mb-3">
+                        <label for="create-order-id" class="form-label small fw-semibold text-dark">대상 주문 선택 <span class="text-danger">*</span></label>
+                        <select id="create-order-id" class="form-select" required onchange="onOrderSelectChanged(this)">
+                            <option value="">-- 최근 주문을 선택하세요 --</option>
+                            {% for ord in recent_orders %}
+                            <option value="{{ ord.id }}" data-amount="{{ ord.final_amount }}">
+                                #{{ ord.order_number }} ({{ ord.recipient_name }} / {{ "{:,}".format(ord.final_amount|int) }}원 / {{ ord.status }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="create-refund-amount" class="form-label small fw-semibold text-dark">환불 금액 (원) <span class="text-danger">*</span></label>
+                        <input type="number" id="create-refund-amount" class="form-control" placeholder="환불 금액 입력" min="0" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="create-reason" class="form-label small fw-semibold text-dark">취소 / 환불 사유 <span class="text-danger">*</span></label>
+                        <input type="text" id="create-reason" class="form-control" placeholder="예: 고객 단순 변심 취소, 상품 품절 취소 등" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="create-status" class="form-label small fw-semibold text-dark">등록 상태</label>
+                        <select id="create-status" class="form-select">
+                            <option value="APPROVED" selected>환불승인 (APPROVED - 주문취소 처리)</option>
+                            <option value="COMPLETED">환불완료 (COMPLETED - 환불완료 처리)</option>
+                            <option value="REQUESTED">요청대기 (REQUESTED - 심사대기)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="create-memo" class="form-label small fw-semibold text-dark">관리자 메모 (선택)</label>
+                        <input type="text" id="create-memo" class="form-control" placeholder="관리자 기록 메모">
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="create-restore-stock" checked>
+                        <label class="form-check-label small text-dark fw-semibold" for="create-restore-stock">
+                            주문 상품 재고 자동 복구 가산
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top bg-light py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+                <button type="button" id="btn-submit-create" class="btn btn-primary btn-sm px-3" onclick="submitCreateRefund()">
+                    <span id="submit-create-text">등록하기</span>
+                    <span id="submit-create-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRefundId = null;
+let refundDetailModalInstance = null;
+let createRefundModalInstance = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const detailEl = document.getElementById('refundDetailModal');
+    if (detailEl) refundDetailModalInstance = new bootstrap.Modal(detailEl);
+
+    const createEl = document.getElementById('createRefundModal');
+    if (createEl) createRefundModalInstance = new bootstrap.Modal(createEl);
+});
+
+// 직권 등록 모달에서 주문 선택 시 금액 자동 채움
+function onOrderSelectChanged(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const amount = opt.getAttribute('data-amount');
+    if (amount) {
+        document.getElementById('create-refund-amount').value = amount;
+    }
+}
+
+// 환불 상세 모달 열기
+async function openRefundDetail(refundId) {
+    currentRefundId = refundId;
+
+    const loadingEl = document.getElementById('refund-loading');
+    const contentEl = document.getElementById('refund-content');
+
+    loadingEl.classList.remove('d-none');
+    contentEl.classList.add('d-none');
+
+    if (refundDetailModalInstance) refundDetailModalInstance.show();
+
+    try {
+        const res = await fetch(`/admin/refunds/${refundId}`);
+        const data = await res.json();
+
+        if (data.success && data.refund) {
+            const r = data.refund;
+
+            document.getElementById('modal-refund-order-number').textContent = `#${r.order_number}`;
+            document.getElementById('process-status').value = r.status;
+            document.getElementById('process-memo').value = r.admin_memo || '';
+
+            document.getElementById('modal-refund-amount').textContent = `${Number(r.refund_amount).toLocaleString()}원`;
+            document.getElementById('modal-refund-created').textContent = r.created_at || '-';
+            document.getElementById('modal-refund-processed').textContent = r.processed_at || '-';
+            document.getElementById('modal-refund-reason').textContent = r.reason || '-';
+
+            document.getElementById('modal-customer-name').textContent = r.customer_name;
+            document.getElementById('modal-customer-email').textContent = r.customer_email;
+            document.getElementById('modal-recipient-info').textContent = `${r.recipient_name} / ${r.recipient_phone}`;
+            document.getElementById('modal-shipping-address').textContent = r.shipping_address;
+
+            // 품목 렌더링
+            const items = r.items || [];
+            const tbody = document.getElementById('modal-order-items-tbody');
+            tbody.innerHTML = '';
+
+            items.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 py-1 fw-semibold small text-dark">${it.product_name}</td>
+                    <td class="py-1 small text-muted">${it.option_name || '-'}</td>
+                    <td class="text-center py-1 small">${it.quantity}개</td>
+                    <td class="text-end pe-3 py-1 small fw-bold text-dark">${Number(it.subtotal).toLocaleString()}원</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            loadingEl.classList.add('d-none');
+            contentEl.classList.remove('d-none');
+        } else {
+            alert(data.message || '환불 정보를 불러오지 못했습니다.');
+            if (refundDetailModalInstance) refundDetailModalInstance.hide();
+        }
+    } catch (e) {
+        alert('조회 중 통신 오류가 발생했습니다: ' + e.message);
+        if (refundDetailModalInstance) refundDetailModalInstance.hide();
+    }
+}
+
+// 환불 심사 처리 저장
+async function saveRefundProcess() {
+    if (!currentRefundId) return;
+
+    const newStatus = document.getElementById('process-status').value;
+    const memo = document.getElementById('process-memo').value;
+    const restoreStock = document.getElementById('process-restore-stock').checked;
+
+    const btn = document.getElementById('btn-save-process');
+    const btnText = document.getElementById('save-process-text');
+    const btnSpinner = document.getElementById('save-process-spinner');
+
+    btn.disabled = true;
+    btnText.classList.add('d-none');
+    btnSpinner.classList.remove('d-none');
+
+    try {
+        const res = await fetch(`/admin/refunds/${currentRefundId}/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: newStatus,
+                admin_memo: memo,
+                restore_stock: restoreStock
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message || '환불 처리가 완료되었습니다.');
+            window.location.reload();
+        } else {
+            alert('처리 실패: ' + (data.message || '오류 발생'));
+            btn.disabled = false;
+            btnText.classList.remove('d-none');
+            btnSpinner.classList.add('d-none');
+        }
+    } catch (e) {
+        alert('통신 중 오류가 발생했습니다: ' + e.message);
+        btn.disabled = false;
+        btnText.classList.remove('d-none');
+        btnSpinner.classList.add('d-none');
+    }
+}
+
+// 직권 취소/환불 등록
+async function submitCreateRefund() {
+    const orderId = document.getElementById('create-order-id').value;
+    const refundAmount = document.getElementById('create-refund-amount').value;
+    const reason = document.getElementById('create-reason').value.trim();
+    const status = document.getElementById('create-status').value;
+    const memo = document.getElementById('create-memo').value.trim();
+    const restoreStock = document.getElementById('create-restore-stock').checked;
+
+    if (!orderId) {
+        alert('주문을 선택해주세요.');
+        return;
+    }
+    if (!reason) {
+        alert('취소/환불 사유를 입력해주세요.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-create');
+    const btnText = document.getElementById('submit-create-text');
+    const btnSpinner = document.getElementById('submit-create-spinner');
+
+    btn.disabled = true;
+    btnText.classList.add('d-none');
+    btnSpinner.classList.remove('d-none');
+
+    try {
+        const res = await fetch('/admin/refunds/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                order_id: orderId,
+                refund_amount: refundAmount,
+                reason: reason,
+                status: status,
+                admin_memo: memo,
+                restore_stock: restoreStock
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message || '취소/환불이 성공적으로 등록되었습니다.');
+            window.location.reload();
+        } else {
+            alert('등록 실패: ' + (data.message || '오류 발생'));
+            btn.disabled = false;
+            btnText.classList.remove('d-none');
+            btnSpinner.classList.add('d-none');
+        }
+    } catch (e) {
+        alert('통신 중 오류가 발생했습니다: ' + e.message);
+        btn.disabled = false;
+        btnText.classList.remove('d-none');
+        btnSpinner.classList.add('d-none');
+    }
+}
+</script>
+{% endblock %}

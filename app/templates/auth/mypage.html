@@ -202,12 +202,57 @@
                         {% endif %}
                     </div>
 
-                    <!-- 탭 3: 환불 내역 ("아직 환불 내역이 없습니다" 안내 문구만) -->
+                    <!-- 탭 3: 환불 내역 -->
                     <div class="tab-pane fade" id="refunds-tab-pane" role="tabpanel" aria-labelledby="refunds-tab" tabindex="0">
+                        {% if refunds and refunds|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead class="table-light text-secondary small">
+                                    <tr>
+                                        <th>주문번호</th>
+                                        <th>요청일시</th>
+                                        <th>환불사유</th>
+                                        <th class="text-end">환불금액</th>
+                                        <th class="text-center">처리상태</th>
+                                        <th>관리자메모</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in refunds %}
+                                    <tr>
+                                        <td class="fw-semibold text-dark font-monospace small">
+                                            {{ (r.orders and r.orders.order_number) or r.order_id[:8] or '-' }}
+                                        </td>
+                                        <td class="text-muted small">{{ r.created_at[:10] if r.created_at else '-' }}</td>
+                                        <td class="small">{{ r.reason }}</td>
+                                        <td class="text-end fw-bold text-danger small">
+                                            {{ "{:,}원".format(r.refund_amount|int) if r.refund_amount is defined else '-' }}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if r.status == 'REQUESTED' %}
+                                            <span class="badge bg-warning text-dark border">요청대기</span>
+                                            {% elif r.status == 'APPROVED' %}
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">환불승인</span>
+                                            {% elif r.status == 'COMPLETED' %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">환불완료</span>
+                                            {% elif r.status == 'REJECTED' %}
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">요청거절</span>
+                                            {% else %}
+                                            <span class="badge bg-light text-dark border">{{ r.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="small text-muted">{{ r.admin_memo or '-' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
                         <div class="text-center py-5">
                             <i class="bi bi-arrow-return-left fs-1 text-muted mb-3 d-block"></i>
                             <p class="text-muted mb-0">아직 환불 내역이 없습니다.</p>
                         </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

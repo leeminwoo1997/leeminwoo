@@ -148,6 +148,9 @@
                     <a href="{{ url_for('admin.orders') }}" class="nav-link {% if request.endpoint == 'admin.orders' %}active{% endif %}">
                         <i class="bi bi-bag-check"></i> 주문 관리
                     </a>
+                    <a href="{{ url_for('admin.refunds') }}" class="nav-link {% if request.endpoint == 'admin.refunds' %}active{% endif %}">
+                        <i class="bi bi-arrow-counterclockwise"></i> 취소/환불 관리
+                    </a>
                     <a href="{{ url_for('admin.users') }}" class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}">
                         <i class="bi bi-people"></i> 사용자 관리
                     </a>

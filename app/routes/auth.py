@@ -581,6 +581,14 @@ def mypage():
         except Exception as e:
             print(f"[경고] 사용자 주문 내역 조회 실패: {e}", file=sys.stderr)
 
+        # 사용자 환불/취소 내역 조회
+        refunds_list = []
+        try:
+            refunds_res = client.table("refunds").select("*, orders(order_number)").eq("user_id", user_id).order("created_at", desc=True).execute()
+            refunds_list = refunds_res.data or []
+        except Exception as e:
+            print(f"[경고] 사용자 환불 내역 조회 실패: {e}", file=sys.stderr)
+
         # 이메일/비밀번호 가입 여부 확인 (소셜 전용 계정 여부 판별)
         try:
             admin_client = get_admin_supabase_client()
@@ -606,6 +614,7 @@ def mypage():
         user_email=profile.get("email") or user_email,
         profile=profile,
         orders=orders_list,
+        refunds=refunds_list,
         is_email_user=is_email_user,
         error=error_msg,
         success=success_msg
