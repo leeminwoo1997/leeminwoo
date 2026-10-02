@@ -51,6 +51,20 @@ def create_app():
         from app.routes.auth import change_password
         return change_password()
 
+    # 관리자 숨김 경로 게이트 (Secret Path Gate) 최상위 라우트 등록
+    admin_secret_path = os.getenv("ADMIN_SECRET_PATH", "admin-gate").strip("/")
+
+    @app.route(f"/{admin_secret_path}", methods=["GET", "POST"])
+    def top_admin_gate():
+        from app.routes.admin import admin_gate
+        return admin_gate()
+
+    if admin_secret_path != "admin-gate":
+        @app.route("/admin-gate", methods=["GET", "POST"])
+        def top_admin_gate_default():
+            from app.routes.admin import admin_gate
+            return admin_gate()
+
     # 모든 템플릿에서 장바구니 요약 정보에 접근할 수 있도록 컨텍스트 프로세서 등록
     @app.context_processor
     def inject_cart():

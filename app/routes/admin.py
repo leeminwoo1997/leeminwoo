@@ -4,6 +4,7 @@
 - admin_required 데코레이터로 관리자 권한 확인
 """
 
+import os
 import sys
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, abort
@@ -11,6 +12,49 @@ from app.services.supabase_client import get_supabase_client, get_admin_supabase
 from app.services.auth_service import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+@admin_bp.route("/gate", methods=["GET", "POST"])
+def admin_gate():
+    """
+    [관리자 보안 접근 게이트 (Secret Path Gate)]
+    - GET /admin/gate?key=<ADMIN_SECRET_KEY> 또는 POST 폼 입력으로 보안 키 검증
+    - 검증 성공 시 session['admin_gate_unlocked'] = True 활성화 후
+      로그인 여부에 따라 대시보드 또는 관리자 로그인으로 리다이렉트
+    """
+    admin_secret_key = os.getenv("ADMIN_SECRET_KEY", "youngstyle-admin-2026!")
+
+    if request.method == "POST":
+        input_key = request.form.get("key", "").strip()
+        if input_key == admin_secret_key.strip():
+            session["admin_gate_unlocked"] = True
+            if session.get("is_admin"):
+                return redirect(url_for("admin.dashboard"))
+            return redirect(url_for("auth.login", next=url_for("admin.dashboard"), success="gate_unlocked"))
+        return render_template("admin/gate.html", error="보안 접근 키가 일치하지 않습니다.")
+
+    # GET 요청
+    req_key = (
+        request.args.get("key") or 
+        request.args.get("secret") or 
+        request.args.get("adminkey") or ""
+    ).strip()
+
+    if req_key:
+        if req_key == admin_secret_key.strip():
+            session["admin_gate_unlocked"] = True
+            if session.get("is_admin"):
+                return redirect(url_for("admin.dashboard"))
+            return redirect(url_for("auth.login", next=url_for("admin.dashboard"), success="gate_unlocked"))
+        return render_template("admin/gate.html", error="보안 접근 키가 일치하지 않습니다.")
+
+    is_already_unlocked = bool(session.get("is_admin") or session.get("admin_gate_unlocked"))
+
+    return render_template(
+        "admin/gate.html",
+        is_already_unlocked=is_already_unlocked,
+        error=None
+    )
 
 
 @admin_bp.route("/")

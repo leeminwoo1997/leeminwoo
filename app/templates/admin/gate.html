@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}관리자 보안 게이트 - Young Style{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-5">
+            <div class="card border-0 shadow-lg rounded-4 p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger mb-3" style="width: 72px; height: 72px;">
+                        <i class="bi bi-shield-lock-fill fs-1"></i>
+                    </div>
+                    <span class="badge bg-danger rounded-pill px-3 py-1 mb-2">ADMIN SECURITY GATE</span>
+                    <h3 class="fw-bold text-dark mb-1">관리자 보안 인증 게이트</h3>
+                    <p class="text-muted small mb-0">인가된 관리자만 접근할 수 있는 전용 보안 게이트입니다.</p>
+                </div>
+
+                <!-- 에러 알림 -->
+                {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center rounded-3 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                    <div>{{ error }}</div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                {% if is_already_unlocked %}
+                <div class="alert alert-success d-flex align-items-center rounded-3 mb-4" role="alert">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div class="small">현재 관리자 보안 게이트가 <strong>인증(잠금해제)</strong>된 상태입니다.</div>
+                </div>
+                <div class="d-grid mb-3">
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-dark btn-lg fw-bold rounded-3">
+                        <i class="bi bi-speedometer2 me-2"></i>관리자 백오피스 바로가기
+                    </a>
+                </div>
+                <hr class="my-4">
+                <p class="text-muted small text-center mb-2">보안 키를 다시 인증하려면 아래에 입력하세요.</p>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('admin.admin_gate') }}">
+                    <div class="mb-4">
+                        <label for="key" class="form-label fw-semibold text-dark">
+                            보안 접근 키 (Secret Access Key) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-secondary border-end-0">
+                                <i class="bi bi-key-fill"></i>
+                            </span>
+                            <input type="password" class="form-control border-start-0" id="key" name="key" 
+                                   placeholder="관리자 전용 보안 키를 입력하세요" required autofocus>
+                        </div>
+                        <div class="form-text text-muted small mt-2">
+                            <i class="bi bi-info-circle me-1"></i>정상 인증 시 백오피스 로그인 및 관리자 화면 접근이 활성화됩니다.
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-danger btn-lg fw-bold rounded-3 shadow-sm py-3">
+                            <i class="bi bi-unlock-fill me-2"></i>게이트 인증 및 입장
+                        </button>
+                    </div>
+                </form>
+
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('main.index') }}" class="text-muted text-decoration-none small">
+                        <i class="bi bi-arrow-left me-1"></i>쇼핑몰 메인으로 돌아가기
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

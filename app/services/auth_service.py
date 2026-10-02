@@ -43,25 +43,56 @@ def login_required(f):
     return decorated_function
 
 
+def is_admin_gate_unlocked() -> bool:
+    """
+    관리자 보안 게이트(Secret Path / Key) 통과 여부 확인
+    1. 이미 관리자 권한으로 로그인된 세션: 항상 허용
+    2. 세션에 admin_gate_unlocked 플래그가 있는 경우: 허용
+    3. URL 쿼리 파라미터(?adminkey=, ?secret=, ?key=)로 올바른 보안 키가 전달된 경우: 게이트 언락 후 허용
+    """
+    if session.get("is_admin"):
+        return True
+
+    if session.get("admin_gate_unlocked"):
+        return True
+
+    # 환경 변수에서 관리자 보안 키 로드
+    admin_secret_key = os.getenv("ADMIN_SECRET_KEY", "youngstyle-admin-2026!")
+    req_key = (
+        request.args.get("adminkey") or
+        request.args.get("secret") or
+        request.args.get("key")
+    )
+    if req_key and req_key.strip() == admin_secret_key.strip():
+        session["admin_gate_unlocked"] = True
+        return True
+
+    return False
+
+
 def admin_required(f):
     """
-    관리자 권한 필수 데코레이터
-    - Flask session에 'user_id'가 존재하고 'is_admin' = True인지 확인
-    - 로그인하지 않았으면 로그인 페이지로 리다이렉트
-    - 로그인했지만 관리자가 아니면 403 Forbidden 오류 표시
+    관리자 권한 필수 데코레이터 (숨김 경로 및 보안 게이트 적용)
+    - 관리자 보안 게이트(Secret Key / Path)를 거치지 않은 비인가 접근은 404 Not Found로 완전 은닉
+    - 게이트 통과 후 미로그인 상태일 때는 로그인 페이지(/auth/login)로 이동
+    - 로그인 상태이지만 관리자 권한(role == 'admin')이 아닐 경우 404 Not Found로 은닉 (관리자 페이지 존재 숨김)
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("user_id"):
-            # 미로그인 상태일 때 로그인 페이지로 이동
-            return redirect(url_for("auth.login", error="login_required", next=request.path))
-        
-        # 관리자 권한 확인
-        if not session.get("is_admin"):
-            # 관리자 권한이 없을 때 403 오류
+        # 1. 관리자 보안 게이트 검증: 미통과 시 404 Not Found로 은닉 (스캐너 및 외부 접근 차단)
+        if not is_admin_gate_unlocked():
             from flask import abort
-            abort(403)
-        
+            abort(404)
+
+        # 2. 미로그인 상태일 때 로그인 페이지로 이동
+        if not session.get("user_id"):
+            return redirect(url_for("auth.login", error="login_required", next=request.path))
+
+        # 3. 로그인 상태이지만 관리자 권한이 없으면 404 Not Found로 은닉
+        if not session.get("is_admin"):
+            from flask import abort
+            abort(404)
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -70,18 +101,21 @@ def set_user_session(user_id: str) -> None:
     """
     사용자 로그인 후 Flask session에 사용자 정보 설정
     - user_id로부터 profiles 테이블에서 role 조회
-    - session에 is_admin 플래그 설정
+    - session에 is_admin 플래그 설정 및 관리자 게이트 언락
     """
-    supabase = get_supabase_client()
+    supabase = get_admin_supabase_client() or get_supabase_client()
     if not supabase or not user_id:
         session["is_admin"] = False
         return
-    
+
     try:
         res = supabase.table("profiles").select("role").eq("id", user_id).execute()
         if res.data and len(res.data) > 0:
             role = res.data[0].get("role", "customer")
-            session["is_admin"] = (role == "admin")
+            is_admin = (role == "admin")
+            session["is_admin"] = is_admin
+            if is_admin:
+                session["admin_gate_unlocked"] = True
         else:
             session["is_admin"] = False
     except Exception as e:

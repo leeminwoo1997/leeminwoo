@@ -65,6 +65,7 @@ SUCCESS_MESSAGES = {
     "email_confirmed": "이메일 인증이 완료되었습니다.",
     "profile_updated": "회원 정보가 성공적으로 수정되었습니다.",
     "password_changed": "비밀번호가 변경되었습니다.",
+    "gate_unlocked": "관리자 보안 게이트가 인증되었습니다. 관리자 계정으로 로그인해주세요.",
 }
 
 
