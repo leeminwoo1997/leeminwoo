@@ -6,7 +6,7 @@
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, abort
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
 from app.services.auth_service import admin_required
@@ -97,7 +97,7 @@ def dashboard():
             )
             
             # 오늘 매출 계산
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             today_orders = [
                 o for o in orders_detail_res.data
                 if o.get("created_at") and datetime.fromisoformat(o.get("created_at", "").replace("Z", "+00:00")).date() == today
@@ -282,7 +282,7 @@ def product_edit(product_id):
                 "price": price,
                 "discount_rate": discount_rate,
                 "is_active": is_active,
-                "updated_at": datetime.utcnow().isoformat()
+                "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", product_id).execute()
             
             return redirect(url_for("admin.products", success="product_updated"))
@@ -649,7 +649,7 @@ def order_status_update(order_id):
 
         update_payload = {
             "status": new_status,
-            "updated_at": datetime.utcnow().isoformat()
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
         if tracking_number is not None:
@@ -943,7 +943,7 @@ def refund_process(refund_id):
 
         order_id = cur_res.data[0].get("order_id")
 
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         update_payload = {
             "status": new_status,
             "admin_memo": admin_memo if admin_memo else None,
@@ -1028,7 +1028,7 @@ def refund_create():
         if status not in valid_statuses:
             status = "APPROVED"
 
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         insert_payload = {
             "order_id": order_id,
             "user_id": user_id,
@@ -1170,10 +1170,8 @@ def user_delete(user_id):
             target_name = target_user.get("full_name") or target_user.get("email") or "사용자"
 
         # 1. Supabase Auth에서 사용자 삭제 (cascade로 profiles 등 연계 처리)
-        auth_success = False
         try:
             admin.auth.admin.delete_user(user_id)
-            auth_success = True
         except Exception as auth_err:
             print(f"[경고] Auth 사용자 삭제 중 오류: {auth_err}", file=sys.stderr)
 
@@ -1276,7 +1274,7 @@ def reports():
                     sales_by_date[date] = sales_by_date.get(date, 0) + price
                 
                 # 최근 30일 데이터만
-                thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).date()
+                thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).date()
                 for date in sorted(sales_by_date.keys()):
                     if datetime.fromisoformat(date).date() >= thirty_days_ago:
                         sales_data.append({

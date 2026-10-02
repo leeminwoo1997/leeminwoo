@@ -6,8 +6,7 @@
 - Young Style 2026 S/S 컬렉션 기반
 """
 
-import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ===============================================
 # 챗봇 규칙 기반 응답 데이터베이스
@@ -183,6 +182,6 @@ def format_chat_message(user_id: str, sender_type: str, content: str, message_id
         "user_id": user_id,
         "sender_type": sender_type,
         "content": content,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "is_read": False
     }

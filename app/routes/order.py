@@ -7,7 +7,6 @@
 - GET /order/api/default-shipping : 기본 배송지 정보 비동기 조회 API
 """
 
-import sys
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, flash
 from app.services.auth_service import login_required
 from app.services.order_service import (
@@ -125,7 +124,6 @@ def order_complete(order_id: str):
     user_id = session.get("user_id")
 
     # 1. order_id (또는 order_number)로 주문 조회 (사용자 제한 없이 조회 후 소유권 체크)
-    admin = get_default_shipping_info(user_id)  # noqa
     order = get_order_by_identifier(order_id)
 
     if not order:
@@ -152,11 +150,6 @@ def api_default_shipping():
     (profiles 테이블 조회)
     """
     user_id = session.get("user_id")
-    shipping_info = get_default_shipping_info(user_id)
-    return jsonify({
-        "success": True,
-        "shipping": shipping_info
-    })
     shipping_info = get_default_shipping_info(user_id)
     return jsonify({
         "success": True,

@@ -21,6 +21,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
+from app.services.cart_service import get_user_db_cart
 
 
 def is_valid_uuid(val: str) -> bool:
@@ -88,127 +89,14 @@ def get_checkout_data(user_id: str) -> dict:
     - 장바구니 항목 존재 여부 확인
     - 품절(stock=0) 아이템 존재 여부 확인
     - 상품금액, 배송비, 최종 결제금액 계산
-    - 기본 배송지 정보 로드
+    - 기본 배송지 정보 로드 (N+1 최적화 적용)
     """
-    admin = get_admin_supabase_client() or get_supabase_client()
-    if not admin or not user_id:
-        return {
-            "is_empty": True,
-            "has_out_of_stock": False,
-            "cart_items": [],
-            "total_price": 0,
-            "shipping_fee": 0,
-            "final_price": 0,
-            "default_shipping": get_default_shipping_info(user_id)
-        }
-
-    # 1. carts 테이블에서 사용자의 장바구니 품목 조회
-    cart_res = admin.table("carts").select(
-        "id, product_option_id, quantity"
-    ).eq("user_id", user_id).execute()
-
-    if not cart_res.data or len(cart_res.data) == 0:
-        return {
-            "is_empty": True,
-            "has_out_of_stock": False,
-            "cart_items": [],
-            "total_price": 0,
-            "shipping_fee": 0,
-            "final_price": 0,
-            "default_shipping": get_default_shipping_info(user_id)
-        }
-
-    cart_items = []
-    total_price = 0
-    total_quantity = 0
-    has_out_of_stock = False
-
-    for cart_item in cart_res.data:
-        product_option_id = cart_item["product_option_id"]
-        quantity = int(cart_item.get("quantity", 1) or 1)
-
-        # product_options 조회
-        opt_res = admin.table("product_options").select(
-            "id, product_id, color, size, stock, stock_quantity, additional_price"
-        ).eq("id", product_option_id).execute()
-
-        if not opt_res.data:
-            continue
-
-        option = opt_res.data[0]
-        product_id = option["product_id"]
-
-        stock = option.get("stock")
-        if stock is None:
-            stock = option.get("stock_quantity") or 0
-        stock = max(0, int(stock))
-
-        # products 조회
-        prod_res = admin.table("products").select(
-            "id, name, price, discount_rate"
-        ).eq("id", product_id).execute()
-
-        if not prod_res.data:
-            continue
-
-        product = prod_res.data[0]
-
-        # 단가 및 할인가 계산
-        original_price = int(product.get("price", 0))
-        discount_rate = float(product.get("discount_rate", 0) or 0)
-        discounted_price = int(original_price * (1 - discount_rate / 100))
-
-        # 상품 이미지 조회 (대표 이미지)
-        img_res = admin.table("product_images").select(
-            "image_url"
-        ).eq("product_id", product_id).eq("is_primary", True).limit(1).execute()
-        thumbnail_url = img_res.data[0]["image_url"] if img_res.data else "https://via.placeholder.com/70x80"
-
-        subtotal = discounted_price * quantity
-        total_price += subtotal
-        total_quantity += quantity
-
-        is_out_of_stock = (stock == 0)
-        if is_out_of_stock:
-            has_out_of_stock = True
-
-        cart_items.append({
-            "cart_id": cart_item["id"],
-            "product_id": product_id,
-            "product_option_id": product_option_id,
-            "name": product["name"],
-            "color": option.get("color", "") or "-",
-            "size": option.get("size", "") or "-",
-            "quantity": quantity,
-            "price": discounted_price,
-            "price_formatted": f"{discounted_price:,}원",
-            "subtotal": subtotal,
-            "subtotal_formatted": f"{subtotal:,}원",
-            "thumbnail_url": thumbnail_url,
-            "stock": stock,
-            "is_out_of_stock": is_out_of_stock
-        })
-
-    # 배송비 계산 정책: 50,000원 이상 무료, 미만 3,000원
-    shipping_fee = 0 if total_price >= 50000 else 3000
-    final_price = total_price + shipping_fee
-
-    default_shipping = get_default_shipping_info(user_id)
-
-    return {
-        "is_empty": len(cart_items) == 0,
-        "has_out_of_stock": has_out_of_stock,
-        "cart_items": cart_items,
-        "items_count": len(cart_items),
-        "total_quantity": total_quantity,
-        "total_price": total_price,
-        "total_price_formatted": f"{total_price:,}원",
-        "shipping_fee": shipping_fee,
-        "shipping_fee_formatted": f"{shipping_fee:,}원" if shipping_fee > 0 else "무료",
-        "final_price": final_price,
-        "final_price_formatted": f"{final_price:,}원",
-        "default_shipping": default_shipping
-    }
+    cart_summary = get_user_db_cart(user_id)
+    cart_summary["default_shipping"] = get_default_shipping_info(user_id)
+    cart_summary["total_price"] = cart_summary["total_price_num"]
+    cart_summary["shipping_fee"] = cart_summary["shipping_fee_num"]
+    cart_summary["final_price"] = cart_summary["final_price_num"]
+    return cart_summary
 
 
 def create_order(user_id: str, form_data: dict) -> tuple[bool, str, str | None]:
@@ -239,72 +127,35 @@ def create_order(user_id: str, form_data: dict) -> tuple[bool, str, str | None]:
     # --------------------------------------------------------------------------
     # 1. 장바구니 조회 + 재고 확인 (재고 부족 시 에러, 처리 중단, 아무 것도 쓰지 않음)
     # --------------------------------------------------------------------------
-    cart_res = admin.table("carts").select(
-        "id, product_option_id, quantity"
-    ).eq("user_id", user_id).execute()
-
-    if not cart_res.data or len(cart_res.data) == 0:
+    cart_data = get_user_db_cart(user_id)
+    if cart_data["is_empty"] or not cart_data["cart_items"]:
         return False, "장바구니가 비어 있어 주문할 수 없습니다.", None
 
+    if cart_data["has_out_of_stock"]:
+        return False, "품절되었거나 재고가 부족한 상품이 있어 주문할 수 없습니다.", None
+
     cart_items = []
-    total_amount = 0
-    total_quantity = 0
-
-    for cart_item in cart_res.data:
-        product_option_id = cart_item["product_option_id"]
-        quantity = int(cart_item.get("quantity", 1) or 1)
-
-        # 실시간 재고 확인 (service_role 키 사용)
-        opt_res = admin.table("product_options").select(
-            "id, product_id, color, size, stock, stock_quantity, additional_price"
-        ).eq("id", product_option_id).execute()
-
-        if not opt_res.data:
-            return False, "주문 상품의 옵션 정보를 찾을 수 없습니다.", None
-
-        option = opt_res.data[0]
-        stock = option.get("stock")
-        if stock is None:
-            stock = option.get("stock_quantity") or 0
-        stock = max(0, int(stock))
-
-        # 재고 부족 시 에러, 즉시 처리 중단 (DB에 아무 것도 쓰지 않음)
-        if stock <= 0 or quantity > stock:
+    for item in cart_data["cart_items"]:
+        qty = item["quantity"]
+        stock = item["stock"]
+        if stock <= 0 or qty > stock:
             return False, "품절되었거나 재고가 부족한 상품이 있어 주문할 수 없습니다.", None
 
-        # 상품 정보 조회
-        prod_res = admin.table("products").select(
-            "id, name, price, discount_rate"
-        ).eq("id", option["product_id"]).execute()
-
-        if not prod_res.data:
-            return False, "상품 정보를 찾을 수 없습니다.", None
-
-        product = prod_res.data[0]
-        original_price = int(product.get("price", 0))
-        discount_rate = float(product.get("discount_rate", 0) or 0)
-        discounted_price = int(original_price * (1 - discount_rate / 100))
-
-        subtotal = discounted_price * quantity
-        total_amount += subtotal
-        total_quantity += quantity
-
         cart_items.append({
-            "cart_id": cart_item["id"],
-            "product_id": option["product_id"],
-            "product_option_id": product_option_id,
-            "product_name": product["name"],
-            "color": option.get("color", "") or "-",
-            "size": option.get("size", "") or "-",
-            "quantity": quantity,
-            "unit_price": discounted_price,
-            "subtotal": subtotal,
+            "cart_id": item["cart_id"],
+            "product_id": item["product_id"],
+            "product_option_id": item["product_option_id"],
+            "product_name": item["name"],
+            "color": item["color"],
+            "size": item["size"],
+            "quantity": qty,
+            "unit_price": item["price_num"],
+            "subtotal": item["subtotal_num"],
             "stock": stock
         })
 
-    # 배송비 계산 (50,000원 이상 무료, 미만 3,000원)
-    shipping_fee = 0 if total_amount >= 50000 else 3000
-    final_amount = total_amount + shipping_fee
+    total_amount = cart_data["total_price_num"]
+    final_amount = cart_data["final_price_num"]
 
     # --------------------------------------------------------------------------
     # 2. 배송지 입력값 서버 측 재검증 (휴대폰 번호 패턴, 주소 최소 길이)

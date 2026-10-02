@@ -8,7 +8,7 @@
 import sys
 from flask import Blueprint, request, jsonify, session
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
-from app.services.chatbot_service import get_chatbot_response, get_quick_replies, format_chat_message
+from app.services.chatbot_service import get_chatbot_response, get_quick_replies
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/chat/api")
 

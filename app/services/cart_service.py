@@ -1,13 +1,17 @@
 """
-장바구니 서비스 모듈
-- Flask session 기반으로 비로그인/로그인 사용자 모두 빠르고 안정적으로 동작
-- 장바구니 항목: product_id, name, price, price_num, thumbnail_url, quantity, subtotal
+장바구니 서비스 모듈 (cart_service.py)
+- 세션 기반 임시 장바구니 (비로그인 사용자용)
+- Supabase DB 기반 장바구니 (로그인 사용자용, N+1 쿼리 최적화)
 - 추가(add), 수량변경(update), 삭제(remove), 비우기(clear), 요약정보(get_summary) 제공
 """
 
+import sys
 from flask import session
+from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
 
 CART_SESSION_KEY = "vibe_cart"
+FREE_SHIPPING_THRESHOLD = 50000
+DEFAULT_SHIPPING_FEE = 3000
 
 def get_cart() -> dict:
     """세션에서 장바구니 객체를 가져옵니다. 없으면 기본 구조 반환."""
@@ -106,3 +110,150 @@ def get_cart_summary() -> dict:
         "final_price": f"{final_price:,}원",
         "final_price_num": final_price
     }
+
+
+def get_user_db_cart(user_id: str) -> dict:
+    """
+    [Supabase DB 기반 장바구니 요약 조회 - N+1 쿼리 최적화]
+    - carts + product_options + products 테이블을 중첩 단일 쿼리로 조회
+    - 상품 대표 이미지를 product_id 배치 쿼리로 일괄 매핑 (총 2회 쿼리로 완료)
+    - 장바구니 뷰와 주문서(Checkout) 뷰에서 모두 완벽히 호환되는 표준 데이터 구조 반환
+    """
+    empty_result = {
+        "is_empty": True,
+        "has_out_of_stock": False,
+        "cart_items": [],
+        "items_count": 0,
+        "total_quantity": 0,
+        "total_price": "0원",
+        "total_price_num": 0,
+        "total_price_formatted": "0원",
+        "shipping_fee": "무료",
+        "shipping_fee_num": 0,
+        "shipping_fee_formatted": "무료",
+        "final_price": "0원",
+        "final_price_num": 0,
+        "final_price_formatted": "0원"
+    }
+
+    if not user_id:
+        return empty_result
+
+    admin = get_admin_supabase_client() or get_supabase_client()
+    if not admin:
+        return empty_result
+
+    try:
+        # 1. carts + product_options + products 중첩 단일 조회
+        cart_res = admin.table("carts").select(
+            "id, product_option_id, quantity, "
+            "product_options(id, product_id, color, size, stock, stock_quantity, additional_price, "
+            "products(id, name, price, discount_rate))"
+        ).eq("user_id", user_id).execute()
+
+        raw_rows = cart_res.data or []
+        if not raw_rows:
+            return empty_result
+
+        # 2. 고유 product_id 목록 추출 후 대표 이미지 배치 쿼리 (1회)
+        product_ids = []
+        for row in raw_rows:
+            opt = row.get("product_options") or {}
+            pid = opt.get("product_id")
+            if pid and pid not in product_ids:
+                product_ids.append(pid)
+
+        image_map = {}
+        if product_ids:
+            img_res = admin.table("product_images").select("product_id, image_url")\
+                .eq("is_primary", True)\
+                .in_("product_id", product_ids)\
+                .execute()
+            for img in (img_res.data or []):
+                image_map[img["product_id"]] = img["image_url"]
+
+        # 3. 항목별 단가, 소계 및 재고 검증
+        cart_items = []
+        total_price = 0
+        total_quantity = 0
+        has_out_of_stock = False
+
+        for row in raw_rows:
+            cart_id = row["id"]
+            option_id = row["product_option_id"]
+            quantity = max(1, int(row.get("quantity") or 1))
+
+            opt = row.get("product_options") or {}
+            if not opt:
+                continue
+
+            product = opt.get("products") or {}
+            if not product:
+                continue
+
+            product_id = opt.get("product_id")
+            original_price = int(product.get("price") or 0)
+            discount_rate = float(product.get("discount_rate") or 0)
+            discounted_price = int(original_price * (1 - discount_rate / 100))
+
+            subtotal = discounted_price * quantity
+            total_price += subtotal
+            total_quantity += quantity
+
+            stock = opt.get("stock")
+            if stock is None:
+                stock = opt.get("stock_quantity") or 0
+            stock = max(0, int(stock))
+
+            is_out_of_stock = (stock == 0)
+            if is_out_of_stock:
+                has_out_of_stock = True
+
+            thumbnail_url = image_map.get(product_id) or "https://via.placeholder.com/70x80"
+
+            cart_items.append({
+                "id": cart_id,
+                "cart_id": cart_id,
+                "product_id": product_id,
+                "product_option_id": option_id,
+                "name": product.get("name") or "상품명 없음",
+                "color": opt.get("color") or "-",
+                "size": opt.get("size") or "-",
+                "quantity": quantity,
+                "price": f"{discounted_price:,}원",
+                "price_num": discounted_price,
+                "price_formatted": f"{discounted_price:,}원",
+                "subtotal": f"{subtotal:,}원",
+                "subtotal_num": subtotal,
+                "subtotal_formatted": f"{subtotal:,}원",
+                "thumbnail_url": thumbnail_url,
+                "stock": stock,
+                "is_out_of_stock": is_out_of_stock
+            })
+
+        if not cart_items:
+            return empty_result
+
+        # 배송비 계산: 50,000원 이상 무료, 미만 3,000원
+        shipping_fee = 0 if total_price >= FREE_SHIPPING_THRESHOLD else DEFAULT_SHIPPING_FEE
+        final_price = total_price + shipping_fee
+
+        return {
+            "is_empty": False,
+            "has_out_of_stock": has_out_of_stock,
+            "cart_items": cart_items,
+            "items_count": len(cart_items),
+            "total_quantity": total_quantity,
+            "total_price": f"{total_price:,}원",
+            "total_price_num": total_price,
+            "total_price_formatted": f"{total_price:,}원",
+            "shipping_fee": f"{shipping_fee:,}원" if shipping_fee > 0 else "무료",
+            "shipping_fee_num": shipping_fee,
+            "shipping_fee_formatted": f"{shipping_fee:,}원" if shipping_fee > 0 else "무료",
+            "final_price": f"{final_price:,}원",
+            "final_price_num": final_price,
+            "final_price_formatted": f"{final_price:,}원"
+        }
+    except Exception as e:
+        print(f"[에러] DB 장바구니 조회 실패: {e}", file=sys.stderr)
+        return empty_result

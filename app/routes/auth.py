@@ -13,7 +13,6 @@ from supabase_auth.errors import AuthApiError
 from app.services.supabase_client import get_supabase_client, get_admin_supabase_client
 from app.services.auth_service import (
     login_required,
-    admin_required,
     set_user_session,
     sign_up_user,
     sign_in_user,

@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, url_for
+from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 from app.services.cart_service import get_cart_summary
