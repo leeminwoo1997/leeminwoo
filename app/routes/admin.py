@@ -516,51 +516,129 @@ def users():
     """
     [사용자 관리 페이지]
     - 전체 사용자 목록 조회
+    - 검색 및 등급 필터링
     """
-    supabase = get_supabase_client()
+    supabase = get_admin_supabase_client() or get_supabase_client()
     
     page = request.args.get("page", 1, type=int)
+    search_query = request.args.get("q", "").strip()
+    grade_filter = request.args.get("grade", "all").strip()
     per_page = 20
     offset = (page - 1) * per_page
     
     users_list = []
     total_count = 0
+    current_user_id = session.get("user_id")
     
     try:
-        # 전체 사용자 수
-        count_res = supabase.table("profiles").select("id").execute()
-        total_count = len(count_res.data) if count_res.data else 0
-        
-        # 사용자 목록
+        # 사용자 목록 조회
         users_res = supabase.table("profiles").select(
             "id, email, full_name, phone_number, grade, role, total_spent, created_at"
-        ).order("created_at", desc=True).range(offset, offset + per_page - 1).execute()
+        ).order("created_at", desc=True).execute()
         
-        if users_res.data:
-            for user in users_res.data:
-                users_list.append({
-                    "id": user.get("id")[:8],
-                    "email": user.get("email", "-"),
-                    "full_name": user.get("full_name", "-"),
-                    "phone": user.get("phone_number", "-"),
-                    "grade": user.get("grade", "-"),
-                    "role": "관리자" if user.get("role") == "admin" else "사용자",
-                    "total_spent": f"{int(user.get('total_spent', 0)):,}원",
-                    "joined": user.get("created_at", "")[:10]
-                })
+        all_users = users_res.data or []
+        
+        # 검색 및 등급 필터링
+        filtered_users = []
+        for user in all_users:
+            if grade_filter != "all" and user.get("grade") != grade_filter:
+                continue
+            if search_query:
+                q_lower = search_query.lower()
+                email = (user.get("email") or "").lower()
+                name = (user.get("full_name") or "").lower()
+                phone = (user.get("phone_number") or "").lower()
+                if q_lower not in email and q_lower not in name and q_lower not in phone:
+                    continue
+            filtered_users.append(user)
+            
+        total_count = len(filtered_users)
+        paged_users = filtered_users[offset : offset + per_page]
+        
+        for user in paged_users:
+            user_id = str(user.get("id"))
+            users_list.append({
+                "full_id": user_id,
+                "id": user_id[:8],
+                "email": user.get("email", "-"),
+                "full_name": user.get("full_name", "-"),
+                "phone": user.get("phone_number", "-"),
+                "grade": user.get("grade", "-"),
+                "role": "관리자" if user.get("role") == "admin" else "사용자",
+                "total_spent": f"{int(user.get('total_spent', 0)):,}원",
+                "joined": user.get("created_at", "")[:10],
+                "is_self": bool(current_user_id and user_id == str(current_user_id))
+            })
     
     except Exception as e:
         print(f"[에러] 사용자 조회 실패: {e}", file=sys.stderr)
     
-    total_pages = (total_count + per_page - 1) // per_page
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
     
     return render_template(
         "admin/users.html",
         users=users_list,
         page=page,
         total_pages=total_pages,
-        total_count=total_count
+        total_count=total_count,
+        search_query=search_query,
+        grade_filter=grade_filter
     )
+
+
+@admin_bp.route("/users/<user_id>/delete", methods=["POST"])
+@admin_required
+def user_delete(user_id):
+    """
+    [회원 탈퇴 (삭제) 처리 API]
+    - 관리자가 특정 사용자를 강제 탈퇴 처리
+    - 본인 관리자 계정은 탈퇴 불가
+    - Supabase auth.users 및 profiles 테이블에서 완전 삭제
+    """
+    current_admin_id = session.get("user_id")
+    if current_admin_id and str(user_id) == str(current_admin_id):
+        return jsonify({
+            "success": False,
+            "message": "현재 로그인된 본인 관리자 계정은 탈퇴할 수 없습니다."
+        }), 400
+
+    admin = get_admin_supabase_client()
+    if not admin:
+        return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+    try:
+        # 삭제 대상 사용자 정보 조회
+        target_name = "사용자"
+        profile_res = admin.table("profiles").select("id, email, full_name, role").eq("id", user_id).execute()
+        if profile_res.data and len(profile_res.data) > 0:
+            target_user = profile_res.data[0]
+            target_name = target_user.get("full_name") or target_user.get("email") or "사용자"
+
+        # 1. Supabase Auth에서 사용자 삭제 (cascade로 profiles 등 연계 처리)
+        auth_success = False
+        try:
+            admin.auth.admin.delete_user(user_id)
+            auth_success = True
+        except Exception as auth_err:
+            print(f"[경고] Auth 사용자 삭제 중 오류: {auth_err}", file=sys.stderr)
+
+        # 2. profiles 테이블에서도 확실히 삭제 (auth 계정이 없거나 별도 프로필인 경우)
+        try:
+            admin.table("profiles").delete().eq("id", user_id).execute()
+        except Exception as prof_err:
+            print(f"[경고] profiles 레코드 삭제 중 오류: {prof_err}", file=sys.stderr)
+
+        return jsonify({
+            "success": True,
+            "message": f"'{target_name}' 회원이 성공적으로 탈퇴 처리되었습니다."
+        })
+
+    except Exception as e:
+        print(f"[에러] 회원 탈퇴 처리 실패: {e}", file=sys.stderr)
+        return jsonify({
+            "success": False,
+            "message": f"회원 탈퇴 처리 중 오류가 발생했습니다: {str(e)}"
+        }), 500
 
 
 @admin_bp.route("/inquiries")
