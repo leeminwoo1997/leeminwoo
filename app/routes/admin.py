@@ -510,6 +510,135 @@ def orders():
     )
 
 
+@admin_bp.route("/orders/<order_id>", methods=["GET"])
+@admin_required
+def order_detail_api(order_id):
+    """
+    [주문 상세 정보 조회 API]
+    - 주문 기본 정보, 배송지 정보, 주문 품목 목록(order_items) 반환
+    """
+    try:
+        supabase = get_admin_supabase_client() or get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        # 주문 기본 정보 조회
+        order_res = supabase.table("orders").select(
+            "id, order_number, user_id, status, total_amount, discount_amount, final_amount, "
+            "recipient_name, recipient_phone, shipping_address, shipping_memo, tracking_number, "
+            "paid_at, created_at, updated_at, profiles(full_name, email, phone_number)"
+        ).eq("id", order_id).execute()
+
+        if not order_res.data:
+            return jsonify({"success": False, "message": "해당 주문을 찾을 수 없습니다."}), 404
+
+        order = order_res.data[0]
+        profile = order.get("profiles") or {}
+
+        # 주문 상품 항목 조회
+        items_res = supabase.table("order_items").select(
+            "id, product_id, product_option_id, product_name, option_name, quantity, unit_price, subtotal"
+        ).eq("order_id", order_id).execute()
+
+        items = items_res.data or []
+
+        # 각 상품의 썸네일 이미지 조회
+        for item in items:
+            product_id = item.get("product_id")
+            if product_id:
+                img_res = supabase.table("product_images").select("image_url").eq("product_id", product_id).eq("is_primary", True).limit(1).execute()
+                item["thumbnail_url"] = img_res.data[0]["image_url"] if img_res.data else "https://via.placeholder.com/60x60"
+            else:
+                item["thumbnail_url"] = "https://via.placeholder.com/60x60"
+
+        return jsonify({
+            "success": True,
+            "order": {
+                "id": order["id"],
+                "order_number": order.get("order_number") or order["id"][:8],
+                "status": order.get("status", "PAID"),
+                "total_amount": int(order.get("total_amount") or 0),
+                "discount_amount": int(order.get("discount_amount") or 0),
+                "final_amount": int(order.get("final_amount") or 0),
+                "recipient_name": order.get("recipient_name") or "-",
+                "recipient_phone": order.get("recipient_phone") or "-",
+                "shipping_address": order.get("shipping_address") or "-",
+                "shipping_memo": order.get("shipping_memo") or "-",
+                "tracking_number": order.get("tracking_number") or "",
+                "paid_at": order.get("paid_at") or "-",
+                "created_at": order.get("created_at") or "-",
+                "customer_name": profile.get("full_name") or order.get("recipient_name") or "-",
+                "customer_email": profile.get("email") or "-",
+                "customer_phone": profile.get("phone_number") or order.get("recipient_phone") or "-",
+                "items": items
+            }
+        })
+
+    except Exception as e:
+        print(f"[에러] 주문 상세 조회 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"주문 상세 조회 중 오류가 발생했습니다: {str(e)}"}), 500
+
+
+@admin_bp.route("/orders/<order_id>/status", methods=["POST"])
+@admin_required
+def order_status_update(order_id):
+    """
+    [주문 배송 상태 및 운송장 번호 업데이트 API]
+    - 허용 상태: PENDING_PAYMENT, PAID, PREPARING, SHIPPING, DELIVERED, CANCELLED, REFUNDED
+    - tracking_number (운송장 번호) 함께 업데이트 가능
+    """
+    try:
+        supabase = get_admin_supabase_client() or get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "message": "데이터베이스 연결에 실패했습니다."}), 500
+
+        data = request.get_json(silent=True) or request.form or {}
+        new_status = data.get("status")
+        tracking_number = data.get("tracking_number")
+
+        valid_statuses = [
+            "PENDING_PAYMENT", "PAID", "PREPARING", "SHIPPING", "DELIVERED", "CANCELLED", "REFUNDED"
+        ]
+
+        if not new_status or new_status not in valid_statuses:
+            return jsonify({"success": False, "message": "유효하지 않은 주문 상태입니다."}), 400
+
+        update_payload = {
+            "status": new_status,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        if tracking_number is not None:
+            update_payload["tracking_number"] = tracking_number.strip() if tracking_number.strip() else None
+
+        res = supabase.table("orders").update(update_payload).eq("id", order_id).execute()
+
+        if not res.data:
+            return jsonify({"success": False, "message": "해당 주문을 찾을 수 없습니다."}), 404
+
+        status_kor_map = {
+            "PENDING_PAYMENT": "결제대기",
+            "PAID": "결제완료",
+            "PREPARING": "배송준비",
+            "SHIPPING": "배송중",
+            "DELIVERED": "배송완료",
+            "CANCELLED": "주문취소",
+            "REFUNDED": "환불완료"
+        }
+
+        return jsonify({
+            "success": True,
+            "message": f"주문 상태가 '{status_kor_map.get(new_status, new_status)}'(으)로 변경되었습니다.",
+            "status": new_status,
+            "status_label": status_kor_map.get(new_status, new_status),
+            "tracking_number": update_payload.get("tracking_number") or ""
+        })
+
+    except Exception as e:
+        print(f"[에러] 주문 상태 업데이트 실패: {e}", file=sys.stderr)
+        return jsonify({"success": False, "message": f"상태 업데이트 중 오류가 발생했습니다: {str(e)}"}), 500
+
+
 @admin_bp.route("/users")
 @admin_required
 def users():
