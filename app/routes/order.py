@@ -118,15 +118,24 @@ def create_order_route():
 def order_complete(order_id: str):
     """
     [주문 완료 페이지: GET /order/complete/<order_id>]
-    - 주문 완료 확인 및 주문 상세 요약 안내
-    - 본인의 주문인지 확인 후 렌더링
+    - 본인 주문이 맞는지 확인 (다른 사용자의 order_id 접근 차단: 403 Forbidden)
+    - 주문번호, 배송지, 주문 상품 목록, 결제 금액 표시
+    - "마이페이지로", "쇼핑 계속하기" 버튼 제공
     """
     user_id = session.get("user_id")
-    order = get_order_by_identifier(order_id, user_id=user_id)
+
+    # 1. order_id (또는 order_number)로 주문 조회 (사용자 제한 없이 조회 후 소유권 체크)
+    admin = get_default_shipping_info(user_id)  # noqa
+    order = get_order_by_identifier(order_id)
 
     if not order:
         flash("해당 주문 정보를 찾을 수 없습니다.", "danger")
         return redirect(url_for("main.index"))
+
+    # 2. 본인 주문이 맞는지 확인 (다른 사용자의 order_id 접근 차단)
+    if str(order.get("user_id")) != str(user_id):
+        from flask import abort
+        abort(403)
 
     return render_template(
         "order/complete.html",
